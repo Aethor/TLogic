@@ -40,17 +40,19 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
                 continue
             m = re.match(
                 r"\"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+)Z\"\^\^xsd:dateTime",
-                '"1997-01-01T00:00:00Z"^^xsd:dateTime'
+                '"1997-01-01T00:00:00Z"^^xsd:dateTime',
             )
             assert not m is None
-            metaval = datetime.fromisoformat(m.group(1))
+            metaval = m.group(1)
             if metakey == "startDate":
                 facts[(subj, rel, obj)] = f"{metaval}:{facts[(subj, rel, obj)]}"
             elif metakey == "endDate":
                 facts[(subj, rel, obj)] = f"{facts[(subj, rel, obj)]}:{metaval}"
     print("done!")
 
-    return {key + (ts,) for key, ts in facts.items()}
+    ts_facts = {key + (ts,) for key, ts in facts.items() if ts != ""}
+    print(f"NOTE: dropping {len(facts) - len(ts_facts)} facts without timesamps.")
+    return ts_facts
 
 
 parser = argparse.ArgumentParser()
@@ -69,15 +71,54 @@ print(f"found {len(timestamps)} unique timestamps.")
 
 
 os.makedirs(args.output_dir, exist_ok=True)
-print(f"writing dataset to {args.output_dir}...", end="")
+
+
+print(f"writing entity2id.json to {args.output_dir}...", end="")
 with open(args.output_dir / "entity2id.json", "w") as f:
     json.dump({entity: i for i, entity in enumerate(entities)}, f)
+print("done!")
+
+print(f"writing relation2id.json to {args.output_dir}...", end="")
 with open(args.output_dir / "relation2id.json", "w") as f:
     json.dump({rel: i for i, rel in enumerate(relations)}, f)
+print("done!")
+
+print(f"writing ts2id.json to {args.output_dir}...", end="")
 with open(args.output_dir / "ts2id.json", "w") as f:
     json.dump({ts: i for i, ts in enumerate(timestamps)}, f)
 print("done!")
 
-# TODO: split into train.txt/valid.txt/test.txt
-# aaaand... we're set?
-facts = sorted(facts, key=lambda fact: )
+
+def latest_datetime(ts: str) -> datetime:
+    """
+    :param ts: timestamp with a format of either 'START:', ':END' or
+        'START:END', where START and END being in an ISO format.
+    """
+    start, end = ts.split(":")
+    if end == "":
+        return datetime.fromisoformat(start)
+    return datetime.fromisoformat(end)
+
+
+facts = sorted(facts, key=latest_datetime)  # type: ignore
+
+print(f"writing train.txt to {args.output_dir}...", end="")
+train = facts[: int(0.8 * len(facts))]
+with open(args.output_dir / "train.txt", "w") as f:
+    for subj, rel, obj, ts in train:
+        f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
+print("done!")
+
+print(f"writing valid.txt to {args.output_dir}...", end="")
+valid = facts[int(0.8 * len(facts)) : int(0.9 * len(facts))]
+with open(args.output_dir / "valid.txt", "w") as f:
+    for subj, rel, obj, ts in valid:
+        f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
+print("done!")
+
+print(f"writing test.txt to {args.output_dir}...", end="")
+test = facts[int(0.9 * len(facts)) :]
+with open(args.output_dir / "test.txt", "w") as f:
+    for subj, rel, obj, ts in test:
+        f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
+print("done!")
