@@ -44,9 +44,9 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
             )
             assert not m is None
             metaval = m.group(1)
-            if metakey == "startDate":
+            if metakey == "schema:startDate":
                 facts[(subj, rel, obj)] = f"{metaval}:{facts[(subj, rel, obj)]}"
-            elif metakey == "endDate":
+            elif metakey == "schema:endDate":
                 facts[(subj, rel, obj)] = f"{facts[(subj, rel, obj)]}:{metaval}"
     print("done!")
 
