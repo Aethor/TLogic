@@ -45,9 +45,15 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
             assert not m is None
             metaval = m.group(1)
             if metakey == "schema:startDate":
-                facts[(subj, rel, obj)] = f"{metaval}:{facts[(subj, rel, obj)]}"
+                if facts[(subj, rel, obj)] == "":
+                    facts[(subj, rel, obj)] = f"{metaval}--"
+                else:
+                    facts[(subj, rel, obj)] = f"{metaval}{facts[(subj, rel, obj)]}"
             elif metakey == "schema:endDate":
-                facts[(subj, rel, obj)] = f"{facts[(subj, rel, obj)]}:{metaval}"
+                if facts[(subj, rel, obj)] == "":
+                    facts[(subj, rel, obj)] = f"--{metaval}"
+                else:
+                    facts[(subj, rel, obj)] = f"{facts[(subj, rel, obj)]}{metaval}"
     print("done!")
 
     ts_facts = {key + (ts,) for key, ts in facts.items() if ts != ""}
@@ -91,10 +97,10 @@ print("done!")
 
 def latest_datetime(ts: str) -> datetime:
     """
-    :param ts: timestamp with a format of either 'START:', ':END' or
-        'START:END', where START and END being in an ISO format.
+    :param ts: timestamp with a format of either 'START--', '--END' or
+        'START--END', where START and END being in an ISO format.
     """
-    start, end = ts.split(":")
+    start, end = ts.split("--")
     if end == "":
         return datetime.fromisoformat(start)
     return datetime.fromisoformat(end)
