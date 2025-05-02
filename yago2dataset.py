@@ -56,13 +56,13 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--input-file", "-i", type=pl.Path)
+parser.add_argument("--input-dir", "-i", type=pl.Path)
 parser.add_argument("--relations", "-r", default=set(), nargs="*")
 parser.add_argument("--output-dir", "-o", type=pl.Path)
 args = parser.parse_args()
 
 relations = set(args.relations)
-facts = load_yago(args.input_file, relations)
+facts = load_yago(args.input_dir, relations)
 print(f"found {len(facts)} facts for {len(relations)} relations.")
 entities = {f[0] for f in facts} | {f[2] for f in facts}
 print(f"found {len(entities)} unique entities.")
