@@ -100,7 +100,7 @@ def latest_datetime(ts: str) -> datetime:
     return datetime.fromisoformat(end)
 
 
-facts = sorted(facts, key=latest_datetime)  # type: ignore
+facts = sorted(facts, key=lambda fact: latest_datetime(fact[3]))  # type: ignore
 
 print(f"writing train.txt to {args.output_dir}...", end="")
 train = facts[: int(0.8 * len(facts))]
