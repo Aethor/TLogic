@@ -1,9 +1,26 @@
+from typing import Tuple, List
 import argparse, os, json, re
 from datetime import datetime
 import pathlib as pl
-from typing import Tuple
 
 Fact = Tuple[str, str, str, str]
+
+
+def string_lstrip(s: str, to_strip: str) -> str:
+    try:
+        s = s[s.index(to_strip) + len(to_strip) :]
+    except ValueError:
+        pass
+    return s
+
+
+def clean_prefix(*entities: List[str]) -> List[str]:
+    cleaned = []
+    for entity in entities:
+        entity = string_lstrip(entity, "yago:")
+        entity = string_lstrip(entity, "schema:")
+        cleaned.append(entity)
+    return cleaned
 
 
 def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
@@ -18,6 +35,7 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
             i += 1
             try:
                 subj, rel, obj, _ = line.split("\t")
+                subj, rel, obj = clean_prefix(subj, rel, obj)
             except ValueError:
                 continue
             if not rel in relations:
@@ -34,6 +52,7 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
             i += 1
             try:
                 _, subj, rel, obj, _, metakey, metaval = line.split("\t")
+                subj, rel, obj = clean_prefix(subj, rel, obj)
             except ValueError:
                 continue
             if not (subj, rel, obj) in facts:
