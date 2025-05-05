@@ -1,6 +1,6 @@
 from typing import Tuple, List
 import argparse, os, json, re
-from datetime import datetime
+from datetime import date
 import pathlib as pl
 
 Fact = Tuple[str, str, str, str]
@@ -44,6 +44,7 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
     print("done!")
 
     print("loading YAGO metadata...", end="")
+    unparsable_ts_nb = 0
     with open(path / "yago-meta-facts.ntx") as f:
         i = 0
         for line in f:
@@ -58,23 +59,27 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
             if not (subj, rel, obj) in facts:
                 continue
             m = re.match(
-                r"\"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+)Z\"\^\^xsd:dateTime", metaval
+                r"\"(-?[0-9]{4}-[0-9]{2}-[0-9]{2})T[0-9:]+Z\"\^\^xsd:dateTime", metaval
             )
+            # NOTE: some timestamps are in an incorrect format:
+            # - some dates are of the form '_:ID'
+            # - two timestamps have a year of 49500
             if m is None:
-                print(f"[warning] could not parse ts: {metaval}")
+                unparsable_ts_nb += 1
                 continue
             metaval = m.group(1)
             if metakey == "schema:startDate":
                 if facts[(subj, rel, obj)] == "":
-                    facts[(subj, rel, obj)] = f"{metaval}--"
+                    facts[(subj, rel, obj)] = f"{metaval}:"
                 else:
                     facts[(subj, rel, obj)] = f"{metaval}{facts[(subj, rel, obj)]}"
             elif metakey == "schema:endDate":
                 if facts[(subj, rel, obj)] == "":
-                    facts[(subj, rel, obj)] = f"--{metaval}"
+                    facts[(subj, rel, obj)] = f":{metaval}"
                 else:
                     facts[(subj, rel, obj)] = f"{facts[(subj, rel, obj)]}{metaval}"
     print("done!")
+    print(f"NOTE: there were {unparsable_ts_nb} unparsable timestamps.")
 
     ts_facts = {key + (ts,) for key, ts in facts.items() if ts != ""}
     print(f"NOTE: dropping {len(facts) - len(ts_facts)} facts without timesamps.")
@@ -115,18 +120,29 @@ with open(args.output_dir / "ts2id.json", "w") as f:
 print("done!")
 
 
-def latest_datetime(ts: str) -> datetime:
+def latest_date(ts: str) -> date:
     """
-    :param ts: timestamp with a format of either 'START--', '--END' or
-        'START--END', where START and END being in an ISO format.
+    .. note::
+
+        Python does not support negative timestamps.  Since
+        in our case their relative ordering is non-important (what's
+        important is that these timestamps will, in practive, end up
+        in the training dataset), we simply treat them as 0001-01-01.
+
+    :param ts: timestamp with a format of either 'START: ':END' or
+        'START:END', where START and END are in YYYY-MM-DD format.
     """
-    start, end = ts.split("--")
+    start, end = ts.split(":")
     if end == "":
-        return datetime.fromisoformat(start)
-    return datetime.fromisoformat(end)
+        if start.startswith("-"):
+            return date(1, 1, 1)
+        return date.fromisoformat(start)
+    if end.startswith("-"):
+        return date(1, 1, 1)
+    return date.fromisoformat(end)
 
 
-facts = sorted(facts, key=lambda fact: latest_datetime(fact[3]))  # type: ignore
+facts = sorted(facts, key=lambda fact: latest_date(fact[3]))  # type: ignore
 
 print(f"writing train.txt to {args.output_dir}...", end="")
 train = facts[: int(0.8 * len(facts))]
