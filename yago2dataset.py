@@ -32,7 +32,7 @@ def set_ts(ts: str, val: str, update: Literal["start", "end"]) -> str:
         return ts.split(":")[0] + ":" + val
 
 
-def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
+def load_yago(path: pl.Path, relations: set[str], cutoff_year: int) -> set[Fact]:
 
     print("loading YAGO facts...", end="")
     facts = {}  # { (subj, rel, obj) => ts }
@@ -56,15 +56,19 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
     unparsable_ts_nb = 0
     with open(path / "yago-meta-facts.ntx") as f:
         i = 0
+
         for line in f:
+
             if i % 1000000 == 0:
                 print(".", end="", flush=True)
             i += 1
+
             try:
                 _, subj, rel, obj, _, metakey, metaval = line.split("\t")
                 subj, rel, obj = clean_prefix(subj, rel, obj)
             except ValueError:
                 continue
+
             if not (subj, rel, obj) in facts:
                 continue
             m = re.match(
@@ -77,6 +81,17 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
                 unparsable_ts_nb += 1
                 continue
             metaval = m.group(1)
+
+            # exclude date that are after a specific year. We
+            # try/except since negative dates are not supported by
+            # Python's datetime.
+            try:
+                d = date.fromisoformat(metaval)
+                if d.year > cutoff_year:
+                    continue
+            except ValueError:
+                pass
+
             if metakey == "schema:startDate":
                 facts[(subj, rel, obj)] = set_ts(
                     facts[(subj, rel, obj)], metaval, "start"
@@ -85,6 +100,7 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
                 facts[(subj, rel, obj)] = set_ts(
                     facts[(subj, rel, obj)], metaval, "end"
                 )
+
     print("done!")
     print(f"NOTE: there were {unparsable_ts_nb} unparsable timestamps.")
 
@@ -97,10 +113,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--input-dir", "-i", type=pl.Path)
 parser.add_argument("--relations", "-r", default=set(), nargs="*")
 parser.add_argument("--output-dir", "-o", type=pl.Path)
+parser.add_argument("--cutoff-year", "-c", type=int, default=2024)
 args = parser.parse_args()
 
 relations = set(args.relations)
-facts = load_yago(args.input_dir, relations)
+facts = load_yago(args.input_dir, relations, args.cutoff_year)
 print(f"found {len(facts)} facts for {len(relations)} relations.")
 entities = {f[0] for f in facts} | {f[2] for f in facts}
 print(f"found {len(entities)} unique entities.")
