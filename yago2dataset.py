@@ -60,7 +60,9 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
             m = re.match(
                 r"\"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+)Z\"\^\^xsd:dateTime", metaval
             )
-            assert not m is None
+            if m is None:
+                print(f"[warning] could not parse ts: {metaval}")
+                continue
             metaval = m.group(1)
             if metakey == "schema:startDate":
                 if facts[(subj, rel, obj)] == "":
