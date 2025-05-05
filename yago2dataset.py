@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Literal, Tuple, List
 import argparse, os, json, re
 from datetime import date
 import pathlib as pl
@@ -14,13 +14,22 @@ def string_lstrip(s: str, to_strip: str) -> str:
     return s
 
 
-def clean_prefix(*entities: List[str]) -> List[str]:
+def clean_prefix(*entities: str) -> List[str]:
     cleaned = []
     for entity in entities:
         entity = string_lstrip(entity, "yago:")
         entity = string_lstrip(entity, "schema:")
         cleaned.append(entity)
     return cleaned
+
+
+def set_ts(ts: str, val: str, update: Literal["start", "end"]) -> str:
+    if ts == "":
+        ts = ":"
+    if update == "start":
+        return val + ":" + ts.split(":")[1]
+    else:
+        return ts.split(":")[0] + ":" + val
 
 
 def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
@@ -69,15 +78,13 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
                 continue
             metaval = m.group(1)
             if metakey == "schema:startDate":
-                if facts[(subj, rel, obj)] == "":
-                    facts[(subj, rel, obj)] = f"{metaval}:"
-                else:
-                    facts[(subj, rel, obj)] = f"{metaval}{facts[(subj, rel, obj)]}"
+                facts[(subj, rel, obj)] = set_ts(
+                    facts[(subj, rel, obj)], metaval, "start"
+                )
             elif metakey == "schema:endDate":
-                if facts[(subj, rel, obj)] == "":
-                    facts[(subj, rel, obj)] = f":{metaval}"
-                else:
-                    facts[(subj, rel, obj)] = f"{facts[(subj, rel, obj)]}{metaval}"
+                facts[(subj, rel, obj)] = set_ts(
+                    facts[(subj, rel, obj)], metaval, "end"
+                )
     print("done!")
     print(f"NOTE: there were {unparsable_ts_nb} unparsable timestamps.")
 
