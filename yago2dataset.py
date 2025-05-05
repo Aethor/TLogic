@@ -34,25 +34,8 @@ def set_ts(ts: str, val: str, update: Literal["start", "end"]) -> str:
 
 def load_yago(path: pl.Path, relations: set[str], cutoff_year: int) -> set[Fact]:
 
-    print("loading YAGO facts...", end="")
     facts = {}  # { (subj, rel, obj) => ts }
-    with open(path / "yago-facts.ttl") as f:
-        i = 0
-        for line in f:
-            if i % 1000000 == 0:
-                print(".", end="", flush=True)
-            i += 1
-            try:
-                subj, rel, obj, _ = line.split("\t")
-                subj, rel, obj = clean_prefix(subj, rel, obj)
-            except ValueError:
-                continue
-            if not rel in relations:
-                continue
-            facts[(subj, rel, obj)] = ""
-    print("done!")
-
-    print("loading YAGO metadata...", end="")
+    print("loading YAGO meta-facts...", end="")
     unparsable_ts_nb = 0
     with open(path / "yago-meta-facts.ntx") as f:
         i = 0
@@ -69,8 +52,12 @@ def load_yago(path: pl.Path, relations: set[str], cutoff_year: int) -> set[Fact]
             except ValueError:
                 continue
 
-            if not (subj, rel, obj) in facts:
+            if not rel in relations:
                 continue
+
+            if not (subj, rel, obj) in facts:
+                facts[(subj, rel, obj)] = ""
+
             m = re.match(
                 r"\"(-?[0-9]{4}-[0-9]{2}-[0-9]{2})T[0-9:]+Z\"\^\^xsd:dateTime", metaval
             )
