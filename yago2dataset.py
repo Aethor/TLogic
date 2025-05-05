@@ -39,8 +39,7 @@ def load_yago(path: pl.Path, relations: set[str]) -> set[Fact]:
             if not (subj, rel, obj) in facts:
                 continue
             m = re.match(
-                r"\"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+)Z\"\^\^xsd:dateTime",
-                '"1997-01-01T00:00:00Z"^^xsd:dateTime',
+                r"\"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+)Z\"\^\^xsd:dateTime", metaval
             )
             assert not m is None
             metaval = m.group(1)
