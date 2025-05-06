@@ -6,6 +6,69 @@ import pathlib as pl
 Fact = Tuple[str, str, str, str]
 
 
+class Date:
+    """
+    .. note::
+
+        Python datetime.date does not support negative timestamps.  Since
+        in our case ordering is important, we create his dummy class for sorting
+    """
+
+    @staticmethod
+    def parse_yyyymmdd(ts: str) -> Tuple[int, int, int]:
+        is_negative = False
+        if ts.startswith("-"):
+            ts = ts[1:]
+            is_negative = True
+        year, month, day = map(int, ts.split("-"))
+        if is_negative:
+            year = -year
+        return (year, month, day)
+
+    def __init__(self, ts: str):
+        """
+        :param ts: timestamp with a format of either 'DATE', 'START:',
+            ':END' or 'START:END', where START and END are in
+            YYYY-MM-DD format.
+        """
+        self.ts = ts
+
+        if not ":" in ts:
+            self.year, self.month, self.day = Date.parse_yyyymmdd(ts)
+            self.sort_year, self.sort_month, self.sort_day = (
+                self.year,
+                self.month,
+                self.day,
+            )
+        else:
+            start, end = ts.split(":")
+            if not start == "":
+                self.start_year, self.start_month, self.start_day = Date.parse_yyyymmdd(
+                    start
+                )
+                self.sort_year, self.sort_month, self.sort_day = (
+                    self.start_year,
+                    self.start_month,
+                    self.start_day,
+                )
+            if not end == "":
+                self.end_year, self.end_month, self.end_day = Date.parse_yyyymmdd(end)
+                self.sort_year, self.sort_month, self.sort_day = (
+                    self.end_year,
+                    self.end_month,
+                    self.end_day,
+                )
+
+    def __lt__(self, other) -> bool:
+        if self.sort_year != other.sort_year:
+            return self.sort_year < other.sort_year
+        if self.sort_month != other.sort_month:
+            return self.sort_month < other.sort_month
+        if self.sort_day != other.sort_day:
+            return self.sort_day < other.sort_day
+        return False
+
+
 def string_lstrip(s: str, to_strip: str) -> str:
     try:
         s = s[s.index(to_strip) + len(to_strip) :]
@@ -155,37 +218,10 @@ if __name__ == "__main__":
 
     print(f"writing ts2id.json to {args.output_dir}...", end="")
     with open(args.output_dir / "ts2id.json", "w") as f:
-        json.dump({ts: i for i, ts in enumerate(timestamps)}, f)
+        json.dump({ts: i for i, ts in enumerate(sorted(timestamps, key=Date))}, f)
     print("done!")
 
-    def latest_date(ts: str) -> date:
-        """
-        .. note::
-
-            Python does not support negative timestamps.  Since
-            in our case their relative ordering is non-important (what's
-            important is that these timestamps will, in practive, end up
-            in the training dataset), we simply treat them as 0001-01-01.
-
-        :param ts: timestamp with a format of either 'DATE', 'START:',
-            ':END' or 'START:END', where START and END are in
-            YYYY-MM-DD format.
-        """
-        if not ":" in ts:
-            if ts.startswith("-"):
-                return date(1, 1, 1)
-            return date.fromisoformat(ts)
-
-        start, end = ts.split(":")
-        if end == "":
-            if start.startswith("-"):
-                return date(1, 1, 1)
-            return date.fromisoformat(start)
-        if end.startswith("-"):
-            return date(1, 1, 1)
-        return date.fromisoformat(end)
-
-    facts = sorted(facts, key=lambda fact: latest_date(fact[3]))  # type: ignore
+    facts = sorted(facts, key=lambda fact: Date(fact[3]))  # type: ignore
 
     print(f"writing train.txt to {args.output_dir}...", end="")
     train = facts[: int(0.8 * len(facts))]
