@@ -96,7 +96,9 @@ def set_ts(ts: str, val: str, update: Literal["start", "end"]) -> str:
         return ts.split(":")[0] + ":" + val
 
 
-def load_yago(path: pl.Path, relations: set[str], cutoff_year: int) -> set[Fact]:
+def load_yago(
+    path: pl.Path, relations: set[str], min_year: int, max_year: int
+) -> set[Fact]:
 
     facts = {}  # { (subj, rel, obj) => ts }
     print("loading YAGO meta-facts...", end="")
@@ -133,15 +135,9 @@ def load_yago(path: pl.Path, relations: set[str], cutoff_year: int) -> set[Fact]
                 continue
             metaval = m.group(1)
 
-            # exclude date that are after a specific year. We
-            # try/except since negative dates are not supported by
-            # Python's datetime.
-            try:
-                d = date.fromisoformat(metaval)
-                if d.year > cutoff_year:
-                    continue
-            except ValueError:
-                pass
+            d = Date(metaval)
+            if d.year > max_year or d.year < min_year:
+                continue
 
             if metakey == "schema:startDate":
                 facts[(subj, rel, obj)] = set_ts(
@@ -216,13 +212,14 @@ if __name__ == "__main__":
     parser.add_argument("--input-dir", "-i", type=pl.Path)
     parser.add_argument("--relations", "-r", default=set(), nargs="*")
     parser.add_argument("--output-dir", "-o", type=pl.Path)
-    parser.add_argument("--cutoff-year", "-c", type=int, default=2024)
+    parser.add_argument("--min-year", "-miny", type=int, default=2024)
+    parser.add_argument("--max-year", "-maxy", type=int, default=1925)
     parser.add_argument("--sparsity-filter-threshold", "-s", type=int, default=3)
     parser.add_argument("--linearize", "-l", action="store_true")
     args = parser.parse_args()
 
     relations = set(args.relations)
-    facts = list(load_yago(args.input_dir, relations, args.cutoff_year))
+    facts = list(load_yago(args.input_dir, relations, args.min_year, args.max_year))
     if args.linearize:
         facts = linearize_facts(facts)
         relations = set(f[1] for f in facts)
