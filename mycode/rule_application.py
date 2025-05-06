@@ -176,7 +176,7 @@ def get_walks(rule, walk_edges):
     df = pd.DataFrame(
         walk_edges[0],
         columns=["entity_" + str(0), "entity_" + str(1), "timestamp_" + str(0)],
-        dtype=np.uint16,
+        dtype=np.uint32,
     )  # Change type if necessary for better memory efficiency
     if not rule["var_constraints"]:
         del df["entity_" + str(0)]
@@ -187,7 +187,7 @@ def get_walks(rule, walk_edges):
         df = pd.DataFrame(
             walk_edges[i],
             columns=["entity_" + str(i), "entity_" + str(i + 1), "timestamp_" + str(i)],
-            dtype=np.uint16,
+            dtype=np.uint32,
         )  # Change type if necessary
         df_edges.append(df)
         df = df[0:0]
@@ -230,7 +230,7 @@ def get_walks_complete(rule, walk_edges):
             "entity_" + str(1),
             "timestamp_" + str(0),
         ],
-        dtype=np.uint16,
+        dtype=np.uint32,
     )  # Change type if necessary for better memory efficiency
     df_edges.append(df)
 
@@ -243,7 +243,7 @@ def get_walks_complete(rule, walk_edges):
                 "entity_" + str(i + 1),
                 "timestamp_" + str(i),
             ],
-            dtype=np.uint16,
+            dtype=np.uint32,
         )  # Change type if necessary
         df_edges.append(df)
 
