@@ -1,6 +1,7 @@
 from typing import Literal, Tuple, List
 import argparse, os, json, re
 from datetime import date
+from collections import Counter
 import pathlib as pl
 
 Fact = Tuple[str, str, str, str]
@@ -184,6 +185,31 @@ def linearize_facts(facts: List[Fact]) -> List[Fact]:
     return linearized_facts
 
 
+def sparsity_filter(facts: List[Fact], depth: int = 0) -> List[Fact]:
+
+    print(f"reducing sparsity (round {depth+1})...", end="")
+    counter = Counter()
+    for subj, _, obj, _ in facts:
+        counter[subj] += 1
+        counter[obj] += 1
+
+    filtered_facts = []
+    for fact in facts:
+        subj, _, obj, _ = fact
+        if counter[subj] == 1 or counter[obj] == 1:
+            continue
+        filtered_facts.append(fact)
+    print(f"done! (removed {len(facts) - len(filtered_facts)} entities)")
+
+    # if we removed facts, other entities might have a degree of 1:
+    # call recursively to fix these
+    if len(filtered_facts) < len(facts):
+        filtered_facts = sparsity_filter(filtered_facts, depth + 1)
+
+    assert len(filtered_facts) <= len(facts)
+    return filtered_facts
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -195,10 +221,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     relations = set(args.relations)
-    facts = load_yago(args.input_dir, relations, args.cutoff_year)
+    facts = list(load_yago(args.input_dir, relations, args.cutoff_year))
     if args.linearize:
-        facts = linearize_facts(list(facts))
+        facts = linearize_facts(facts)
         relations = set(f[1] for f in facts)
+    facts = sparsity_filter(facts)
     print(f"found {len(facts)} facts for {len(relations)} relations.")
     entities = {f[0] for f in facts} | {f[2] for f in facts}
     print(f"found {len(entities)} unique entities.")
