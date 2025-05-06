@@ -172,6 +172,8 @@ if __name__ == "__main__":
             YYYY-MM-DD format.
         """
         if not ":" in ts:
+            if ts.startswith("-"):
+                return date(1, 1, 1)
             return date.fromisoformat(ts)
 
         start, end = ts.split(":")
