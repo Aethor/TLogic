@@ -198,6 +198,7 @@ if __name__ == "__main__":
     facts = load_yago(args.input_dir, relations, args.cutoff_year)
     if args.linearize:
         facts = linearize_facts(list(facts))
+        relations = set(f[1] for f in facts)
     print(f"found {len(facts)} facts for {len(relations)} relations.")
     entities = {f[0] for f in facts} | {f[2] for f in facts}
     print(f"found {len(entities)} unique entities.")
