@@ -185,7 +185,7 @@ def linearize_facts(facts: List[Fact]) -> List[Fact]:
     return linearized_facts
 
 
-def sparsity_filter(facts: List[Fact], depth: int = 0) -> List[Fact]:
+def sparsity_filter(facts: List[Fact], threshold: int, depth: int = 0) -> List[Fact]:
 
     print(f"reducing sparsity (round {depth+1})...", end="")
     counter = Counter()
@@ -196,7 +196,7 @@ def sparsity_filter(facts: List[Fact], depth: int = 0) -> List[Fact]:
     filtered_facts = []
     for fact in facts:
         subj, _, obj, _ = fact
-        if counter[subj] == 1 or counter[obj] == 1:
+        if counter[subj] <= threshold or counter[obj] <= threshold:
             continue
         filtered_facts.append(fact)
     print(f"done! (removed {len(facts) - len(filtered_facts)} entities)")
@@ -204,7 +204,7 @@ def sparsity_filter(facts: List[Fact], depth: int = 0) -> List[Fact]:
     # if we removed facts, other entities might have a degree of 1:
     # call recursively to fix these
     if len(filtered_facts) < len(facts):
-        filtered_facts = sparsity_filter(filtered_facts, depth + 1)
+        filtered_facts = sparsity_filter(filtered_facts, threshold, depth + 1)
 
     assert len(filtered_facts) <= len(facts)
     return filtered_facts
@@ -217,6 +217,7 @@ if __name__ == "__main__":
     parser.add_argument("--relations", "-r", default=set(), nargs="*")
     parser.add_argument("--output-dir", "-o", type=pl.Path)
     parser.add_argument("--cutoff-year", "-c", type=int, default=2024)
+    parser.add_argument("--sparsity-filter-threshold", "-s", type=int, default=3)
     parser.add_argument("--linearize", "-l", action="store_true")
     args = parser.parse_args()
 
@@ -225,7 +226,7 @@ if __name__ == "__main__":
     if args.linearize:
         facts = linearize_facts(facts)
         relations = set(f[1] for f in facts)
-    facts = sparsity_filter(facts)
+    facts = sparsity_filter(facts, args.sparsity_filter_threshold)
     print(f"found {len(facts)} facts for {len(relations)} relations.")
     entities = {f[0] for f in facts} | {f[2] for f in facts}
     print(f"found {len(entities)} unique entities.")
