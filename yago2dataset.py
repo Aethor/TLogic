@@ -96,82 +96,112 @@ def load_yago(path: pl.Path, relations: set[str], cutoff_year: int) -> set[Fact]
     return ts_facts
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--input-dir", "-i", type=pl.Path)
-parser.add_argument("--relations", "-r", default=set(), nargs="*")
-parser.add_argument("--output-dir", "-o", type=pl.Path)
-parser.add_argument("--cutoff-year", "-c", type=int, default=2024)
-args = parser.parse_args()
+def linearize_facts(facts: List[Fact]) -> List[Fact]:
 
-relations = set(args.relations)
-facts = load_yago(args.input_dir, relations, args.cutoff_year)
-print(f"found {len(facts)} facts for {len(relations)} relations.")
-entities = {f[0] for f in facts} | {f[2] for f in facts}
-print(f"found {len(entities)} unique entities.")
-timestamps = {f[3] for f in facts}
-print(f"found {len(timestamps)} unique timestamps.")
+    linearized_facts = []
 
+    print("linearizing facts...", end="")
+    for subj, rel, obj, ts in facts:
+        if not ":" in ts:
+            linearized_facts.append((subj, rel, obj, ts))
+        elif ts.endswith(":"):
+            linearized_facts.append((subj, f"start{rel.capitalize()}", obj, ts[:-1]))
+        elif ts.startswith(":"):
+            linearized_facts.append((subj, f"end{rel.capitalize()}", obj, ts[1:]))
+        else:
+            start, end = ts.split(":")
+            if start == end:
+                linearized_facts.append((subj, rel, obj, start))
+            else:
+                linearized_facts.append((subj, f"start{rel.capitalize()}", obj, start))
+                linearized_facts.append((subj, f"end{rel.capitalize()}", obj, end))
+    print("done!")
 
-os.makedirs(args.output_dir, exist_ok=True)
-
-
-print(f"writing entity2id.json to {args.output_dir}...", end="")
-with open(args.output_dir / "entity2id.json", "w") as f:
-    json.dump({entity: i for i, entity in enumerate(entities)}, f)
-print("done!")
-
-print(f"writing relation2id.json to {args.output_dir}...", end="")
-with open(args.output_dir / "relation2id.json", "w") as f:
-    json.dump({rel: i for i, rel in enumerate(relations)}, f)
-print("done!")
-
-print(f"writing ts2id.json to {args.output_dir}...", end="")
-with open(args.output_dir / "ts2id.json", "w") as f:
-    json.dump({ts: i for i, ts in enumerate(timestamps)}, f)
-print("done!")
+    assert len(linearized_facts) >= len(facts)
+    return linearized_facts
 
 
-def latest_date(ts: str) -> date:
-    """
-    .. note::
+if __name__ == "__main__":
 
-        Python does not support negative timestamps.  Since
-        in our case their relative ordering is non-important (what's
-        important is that these timestamps will, in practive, end up
-        in the training dataset), we simply treat them as 0001-01-01.
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input-dir", "-i", type=pl.Path)
+    parser.add_argument("--relations", "-r", default=set(), nargs="*")
+    parser.add_argument("--output-dir", "-o", type=pl.Path)
+    parser.add_argument("--cutoff-year", "-c", type=int, default=2024)
+    parser.add_argument("--linearize", "-l", action="store_true")
+    args = parser.parse_args()
 
-    :param ts: timestamp with a format of either 'START: ':END' or
-        'START:END', where START and END are in YYYY-MM-DD format.
-    """
-    start, end = ts.split(":")
-    if end == "":
-        if start.startswith("-"):
+    relations = set(args.relations)
+    facts = load_yago(args.input_dir, relations, args.cutoff_year)
+    if args.linearize:
+        facts = linearize_facts(list(facts))
+    print(f"found {len(facts)} facts for {len(relations)} relations.")
+    entities = {f[0] for f in facts} | {f[2] for f in facts}
+    print(f"found {len(entities)} unique entities.")
+    timestamps = {f[3] for f in facts}
+    print(f"found {len(timestamps)} unique timestamps.")
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    print(f"writing entity2id.json to {args.output_dir}...", end="")
+    with open(args.output_dir / "entity2id.json", "w") as f:
+        json.dump({entity: i for i, entity in enumerate(entities)}, f)
+    print("done!")
+
+    print(f"writing relation2id.json to {args.output_dir}...", end="")
+    with open(args.output_dir / "relation2id.json", "w") as f:
+        json.dump({rel: i for i, rel in enumerate(relations)}, f)
+    print("done!")
+
+    print(f"writing ts2id.json to {args.output_dir}...", end="")
+    with open(args.output_dir / "ts2id.json", "w") as f:
+        json.dump({ts: i for i, ts in enumerate(timestamps)}, f)
+    print("done!")
+
+    def latest_date(ts: str) -> date:
+        """
+        .. note::
+
+            Python does not support negative timestamps.  Since
+            in our case their relative ordering is non-important (what's
+            important is that these timestamps will, in practive, end up
+            in the training dataset), we simply treat them as 0001-01-01.
+
+        :param ts: timestamp with a format of either 'DATE', 'START:',
+            ':END' or 'START:END', where START and END are in
+            YYYY-MM-DD format.
+        """
+        if not ":" in ts:
+            return date.fromisoformat(ts)
+
+        start, end = ts.split(":")
+        if end == "":
+            if start.startswith("-"):
+                return date(1, 1, 1)
+            return date.fromisoformat(start)
+        if end.startswith("-"):
             return date(1, 1, 1)
-        return date.fromisoformat(start)
-    if end.startswith("-"):
-        return date(1, 1, 1)
-    return date.fromisoformat(end)
+        return date.fromisoformat(end)
 
+    facts = sorted(facts, key=lambda fact: latest_date(fact[3]))  # type: ignore
 
-facts = sorted(facts, key=lambda fact: latest_date(fact[3]))  # type: ignore
+    print(f"writing train.txt to {args.output_dir}...", end="")
+    train = facts[: int(0.8 * len(facts))]
+    with open(args.output_dir / "train.txt", "w") as f:
+        for subj, rel, obj, ts in train:
+            f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
+    print("done!")
 
-print(f"writing train.txt to {args.output_dir}...", end="")
-train = facts[: int(0.8 * len(facts))]
-with open(args.output_dir / "train.txt", "w") as f:
-    for subj, rel, obj, ts in train:
-        f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
-print("done!")
+    print(f"writing valid.txt to {args.output_dir}...", end="")
+    valid = facts[int(0.8 * len(facts)) : int(0.9 * len(facts))]
+    with open(args.output_dir / "valid.txt", "w") as f:
+        for subj, rel, obj, ts in valid:
+            f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
+    print("done!")
 
-print(f"writing valid.txt to {args.output_dir}...", end="")
-valid = facts[int(0.8 * len(facts)) : int(0.9 * len(facts))]
-with open(args.output_dir / "valid.txt", "w") as f:
-    for subj, rel, obj, ts in valid:
-        f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
-print("done!")
-
-print(f"writing test.txt to {args.output_dir}...", end="")
-test = facts[int(0.9 * len(facts)) :]
-with open(args.output_dir / "test.txt", "w") as f:
-    for subj, rel, obj, ts in test:
-        f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
-print("done!")
+    print(f"writing test.txt to {args.output_dir}...", end="")
+    test = facts[int(0.9 * len(facts)) :]
+    with open(args.output_dir / "test.txt", "w") as f:
+        for subj, rel, obj, ts in test:
+            f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
+    print("done!")
