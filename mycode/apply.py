@@ -1,3 +1,4 @@
+from typing import List, Tuple, Dict
 import json
 import time
 import argparse
@@ -12,45 +13,18 @@ from rule_learning import rules_statistics
 from score_functions import score_12
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--dataset", "-d", default="", type=str)
-parser.add_argument("--test_data", default="test", type=str)
-parser.add_argument("--rules", "-r", default="", type=str)
-parser.add_argument("--rule_lengths", "-l", default=1, type=int, nargs="+")
-parser.add_argument("--window", "-w", default=-1, type=int)
-parser.add_argument("--top_k", default=20, type=int)
-parser.add_argument("--num_processes", "-p", default=1, type=int)
-parsed = vars(parser.parse_args())
-
-dataset = parsed["dataset"]
-rules_file = parsed["rules"]
-window = parsed["window"]
-top_k = parsed["top_k"]
-num_processes = parsed["num_processes"]
-rule_lengths = parsed["rule_lengths"]
-rule_lengths = [rule_lengths] if (type(rule_lengths) == int) else rule_lengths
-
-dataset_dir = "../data/" + dataset + "/"
-dir_path = "../output/" + dataset + "/"
-data = Grapher(dataset_dir)
-test_data = data.test_idx if (parsed["test_data"] == "test") else data.valid_idx
-rules_dict = json.load(open(dir_path + rules_file))
-rules_dict = {int(k): v for k, v in rules_dict.items()}
-print("Rules statistics:")
-rules_statistics(rules_dict)
-rules_dict = ra.filter_rules(
-    rules_dict, min_conf=0.01, min_body_supp=2, rule_lengths=rule_lengths
-)
-print("Rules statistics after pruning:")
-rules_statistics(rules_dict)
-learn_edges = store_edges(data.train_idx)
-
-score_func = score_12
-# It is possible to specify a list of list of arguments for tuning
-args = [[0.1, 0.5]]
-
-
-def apply_rules(i, num_queries):
+def apply_rules(
+    test_data,
+    rules_dict: Dict[int, dict],
+    data,
+    learn_edges,
+    score_func,
+    top_k: int,
+    i: int,
+    num_queries: int,
+    args: List[List[float]],
+    window: int,
+) -> Tuple[List[Dict[int, Dict[int, int]]], int]:
     """
     Apply rules (multiprocessing possible).
 
@@ -165,35 +139,86 @@ def apply_rules(i, num_queries):
     return all_candidates, no_cands_counter
 
 
-start = time.time()
-num_queries = len(test_data) // num_processes
-output = Parallel(n_jobs=num_processes)(
-    delayed(apply_rules)(i, num_queries) for i in range(num_processes)
-)
-end = time.time()
+if __name__ == "__main__":
 
-final_all_candidates = [dict() for _ in range(len(args))]
-for s in range(len(args)):
-    for i in range(num_processes):
-        final_all_candidates[s].update(output[i][0][s])
-        output[i][0][s].clear()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", "-d", default="", type=str)
+    parser.add_argument("--test_data", default="test", type=str)
+    parser.add_argument("--rules", "-r", default="", type=str)
+    parser.add_argument("--rule_lengths", "-l", default=1, type=int, nargs="+")
+    parser.add_argument("--window", "-w", default=-1, type=int)
+    parser.add_argument("--top_k", default=20, type=int)
+    parser.add_argument("--num_processes", "-p", default=1, type=int)
+    parsed = vars(parser.parse_args())
 
-final_no_cands_counter = 0
-for i in range(num_processes):
-    final_no_cands_counter += output[i][1]
+    dataset = parsed["dataset"]
+    rules_file = parsed["rules"]
+    window = parsed["window"]
+    top_k = parsed["top_k"]
+    num_processes = parsed["num_processes"]
+    rule_lengths = parsed["rule_lengths"]
+    rule_lengths = [rule_lengths] if (type(rule_lengths) == int) else rule_lengths
 
-total_time = round(end - start, 6)
-print("Application finished in {} seconds.".format(total_time))
-print("No candidates: ", final_no_cands_counter, " queries")
-
-for s in range(len(args)):
-    score_func_str = score_func.__name__ + str(args[s])
-    score_func_str = score_func_str.replace(" ", "")
-    ra.save_candidates(
-        rules_file,
-        dir_path,
-        final_all_candidates[s],
-        rule_lengths,
-        window,
-        score_func_str,
+    dataset_dir = "../data/" + dataset + "/"
+    dir_path = "../output/" + dataset + "/"
+    data = Grapher(dataset_dir)
+    test_data = data.test_idx if (parsed["test_data"] == "test") else data.valid_idx
+    rules_dict = json.load(open(dir_path + rules_file))
+    rules_dict = {int(k): v for k, v in rules_dict.items()}
+    print("Rules statistics:")
+    rules_statistics(rules_dict)
+    rules_dict = ra.filter_rules(
+        rules_dict, min_conf=0.01, min_body_supp=2, rule_lengths=rule_lengths
     )
+    print("Rules statistics after pruning:")
+    rules_statistics(rules_dict)
+    learn_edges = store_edges(data.train_idx)
+
+    score_func = score_12
+    # It is possible to specify a list of list of arguments for tuning
+    args = [[0.1, 0.5]]
+
+    start = time.time()
+    num_queries = len(test_data) // num_processes
+    output = Parallel(n_jobs=num_processes)(
+        delayed(apply_rules)(
+            test_data,
+            rules_dict,
+            data,
+            learn_edges,
+            score_func,
+            top_k,
+            i,
+            num_queries,
+            args,
+            window,
+        )
+        for i in range(num_processes)
+    )
+    end = time.time()
+
+    final_all_candidates = [dict() for _ in range(len(args))]
+    for s in range(len(args)):
+        for i in range(num_processes):
+            final_all_candidates[s].update(output[i][0][s])
+            output[i][0][s].clear()
+
+    final_no_cands_counter = 0
+    for i in range(num_processes):
+        final_no_cands_counter += output[i][1]
+
+    total_time = round(end - start, 6)
+    print("Application finished in {} seconds.".format(total_time))
+    print("No candidates: ", final_no_cands_counter, " queries")
+
+    for s in range(len(args)):
+        score_func_str = score_func.__name__ + str(args[s])
+        score_func_str = score_func_str.replace(" ", "")
+        ra.save_candidates(
+            rules_file,
+            dir_path,
+            final_all_candidates[s],
+            rule_lengths,
+            window,
+            score_func_str,
+        )
