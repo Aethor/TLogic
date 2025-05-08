@@ -339,7 +339,7 @@ while d.year < 2027:
         tries += 1
         print(f".", end="", flush=True)
     if new_fact is None:
-        print(f"it felt impossible to generate a new fact for {ts}, I give up.")
+        print(f"I give up.")
     else:
         train_facts.append(new_fact)
         ts2id[ts] = max(ts2id.values()) + 1
