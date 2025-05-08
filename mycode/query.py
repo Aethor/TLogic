@@ -321,7 +321,7 @@ while d.year < 2027:
     new_fact = None
     tries = 0
     print(f"generating a fact for {ts}...", end="")
-    while new_fact is None and tries >= 10:
+    while new_fact is None and tries <= 10:
         entity = random.choice(subj_entities)
         entity_facts = [f for f in train_facts if f[0] == entity]
         new_fact = sample_new_fact(
