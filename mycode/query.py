@@ -224,7 +224,6 @@ def is_fact_valid(fact: Fact, facts: Graph, schema: Graph, taxonomy: Graph) -> b
     out = is_rel_allowed(subj, rel, facts, schema, taxonomy) and is_obj_allowed(
         obj, rel, facts, schema, taxonomy
     )
-    print((fact, out))
     return out
 
 
@@ -301,7 +300,10 @@ with open("../data/yago4.5-small/ts2id.json") as f:
     ts2id = json.load(f)
 
 facts = Graph()
-facts.loadTurtleFile("../yago4.5-small/yago-facts.ttl", "loading cold facts")
+# facts.loadTurtleFile("../yago4.5-small/yago-facts.ttl", "loading cold facts")
+facts.loadTurtleFile(
+    "../yago4.5-small/yago-facts-types.ttl", "loading cold facts (rdf:type only)"
+)
 
 schema = Graph()
 schema.loadTurtleFile("../yago4.5-small/yago-schema.ttl", "loading YAGO schema")
