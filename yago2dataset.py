@@ -78,15 +78,6 @@ def string_lstrip(s: str, to_strip: str) -> str:
     return s
 
 
-def clean_prefix(*entities: str) -> List[str]:
-    cleaned = []
-    for entity in entities:
-        entity = string_lstrip(entity, "yago:")
-        entity = string_lstrip(entity, "schema:")
-        cleaned.append(entity)
-    return cleaned
-
-
 def set_ts(ts: str, val: str, update: Literal["start", "end"]) -> str:
     if ts == "":
         ts = ":"
@@ -114,7 +105,6 @@ def load_yago(
 
             try:
                 _, subj, rel, obj, _, metakey, metaval = line.split("\t")
-                subj, rel, obj = clean_prefix(subj, rel, obj)
             except ValueError:
                 continue
 
@@ -158,6 +148,10 @@ def load_yago(
 
 def linearize_facts(facts: List[Fact]) -> List[Fact]:
 
+    def update_rel(rel: str, bound: Literal["start", "end"]) -> str:
+        prefix, raw_rel = rel.split(":")
+        return f"{prefix}:{bound}{raw_rel[0].upper()+raw_rel[1:]}"
+
     linearized_facts = []
 
     print("linearizing facts...", end="")
@@ -165,16 +159,16 @@ def linearize_facts(facts: List[Fact]) -> List[Fact]:
         if not ":" in ts:
             linearized_facts.append((subj, rel, obj, ts))
         elif ts.endswith(":"):
-            linearized_facts.append((subj, f"start{rel.capitalize()}", obj, ts[:-1]))
+            linearized_facts.append((subj, update_rel(rel, "start"), obj, ts[:-1]))
         elif ts.startswith(":"):
-            linearized_facts.append((subj, f"end{rel.capitalize()}", obj, ts[1:]))
+            linearized_facts.append((subj, update_rel(rel, "end"), obj, ts[1:]))
         else:
             start, end = ts.split(":")
             if start == end:
                 linearized_facts.append((subj, rel, obj, start))
             else:
-                linearized_facts.append((subj, f"start{rel.capitalize()}", obj, start))
-                linearized_facts.append((subj, f"end{rel.capitalize()}", obj, end))
+                linearized_facts.append((subj, update_rel(rel, "start"), obj, start))
+                linearized_facts.append((subj, update_rel(rel, "end"), obj, end))
     print("done!")
 
     assert len(linearized_facts) >= len(facts)
