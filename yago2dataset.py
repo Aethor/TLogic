@@ -4,6 +4,8 @@ from datetime import date
 from collections import Counter
 import pathlib as pl
 
+from mycode.utils import dump_facts, dump_json
+
 Fact = Tuple[str, str, str, str]
 
 
@@ -43,6 +45,19 @@ class Date:
             )
         else:
             start, end = ts.split(":")
+            if not end == "":
+                self.end_year, self.end_month, self.end_day = Date.parse_yyyymmdd(end)
+                self.sort_year, self.sort_month, self.sort_day = (
+                    self.end_year,
+                    self.end_month,
+                    self.end_day,
+                )
+            # we prioritize start year over end year for sorting. This
+            # is because, starting from an interval, you can always
+            # reason on a fact that has started prior (however, you
+            # may not know this fact is over). But you can't always
+            # reason on an interval fact that is over before before
+            # the current fact, if it started after its start date.
             if not start == "":
                 self.start_year, self.start_month, self.start_day = Date.parse_yyyymmdd(
                     start
@@ -51,13 +66,6 @@ class Date:
                     self.start_year,
                     self.start_month,
                     self.start_day,
-                )
-            if not end == "":
-                self.end_year, self.end_month, self.end_day = Date.parse_yyyymmdd(end)
-                self.sort_year, self.sort_month, self.sort_day = (
-                    self.end_year,
-                    self.end_month,
-                    self.end_day,
                 )
 
     def __lt__(self, other) -> bool:
@@ -226,40 +234,36 @@ if __name__ == "__main__":
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    print(f"writing entity2id.json to {args.output_dir}...", end="")
-    with open(args.output_dir / "entity2id.json", "w") as f:
-        json.dump({entity: i for i, entity in enumerate(entities)}, f)
-    print("done!")
+    dump_json(
+        {entity: i for i, entity in enumerate(entities)},
+        args.output_dir / "entity2id.json",
+        f"writing entity2id.json to {args.output_dir}",
+    )
+    dump_json(
+        {rel: i for i, rel in enumerate(relations)},
+        args.output_dir / "relation2id.json",
+        f"writing relation2id.json to {args.output_dir}",
+    )
+    dump_json(
+        {ts: i for i, ts in enumerate(sorted(timestamps, key=Date))},
+        args.output_dir / "ts2id.json",
+        f"writing ts2id.json to {args.output_dir}",
+    )
 
-    print(f"writing relation2id.json to {args.output_dir}...", end="")
-    with open(args.output_dir / "relation2id.json", "w") as f:
-        json.dump({rel: i for i, rel in enumerate(relations)}, f)
-    print("done!")
-
-    print(f"writing ts2id.json to {args.output_dir}...", end="")
-    with open(args.output_dir / "ts2id.json", "w") as f:
-        json.dump({ts: i for i, ts in enumerate(sorted(timestamps, key=Date))}, f)
-    print("done!")
-
+    # TODO: we should scrap the end date of events of the test set
+    # that ends after the start date of the earliest event from the
+    # valid set (likewise for valid/train)
     facts = sorted(facts, key=lambda fact: Date(fact[3]))  # type: ignore
-
-    print(f"writing train.txt to {args.output_dir}...", end="")
     train = facts[: int(0.8 * len(facts))]
-    with open(args.output_dir / "train.txt", "w") as f:
-        for subj, rel, obj, ts in train:
-            f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
-    print("done!")
-
-    print(f"writing valid.txt to {args.output_dir}...", end="")
     valid = facts[int(0.8 * len(facts)) : int(0.9 * len(facts))]
-    with open(args.output_dir / "valid.txt", "w") as f:
-        for subj, rel, obj, ts in valid:
-            f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
-    print("done!")
-
-    print(f"writing test.txt to {args.output_dir}...", end="")
     test = facts[int(0.9 * len(facts)) :]
-    with open(args.output_dir / "test.txt", "w") as f:
-        for subj, rel, obj, ts in test:
-            f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
-    print("done!")
+
+    dump_facts(
+        train, args.output_dir / "train.txt", f"writing train.txt to {args.output_dir}"
+    )
+    dump_facts(
+        valid, args.output_dir / "valid.txt", f"writing valid.txt to {args.output_dir}"
+    )
+    dump_facts(
+        test, args.output_dir / "test.txt", f"writing test.txt to {args.output_dir}"
+    )
