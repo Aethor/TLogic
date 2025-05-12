@@ -12,6 +12,7 @@ dependencies = [
     "notebook>=6.4.12,<7",
     "torch<1.13.0",
     "transformers>=4.51.3",
+    "bitsandbytes>=0.45.0",
 ]
 
 [dependency-groups]
