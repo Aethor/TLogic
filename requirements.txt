@@ -8,14 +8,21 @@ attrs==21.4.0
 backcall==0.2.0
 beautifulsoup4==4.11.1
 bleach==5.0.0
+certifi==2025.4.26
 cffi==1.15.0
-colorama==0.4.4 ; sys_platform == 'win32'
+charset-normalizer==3.4.2
+colorama==0.4.4 ; sys_platform == 'win32' or platform_system == 'Windows'
 debugpy==1.6.0
 decorator==5.1.1
 defusedxml==0.7.1
 entrypoints==0.4
 executing==0.8.3
 fastjsonschema==2.15.3
+filelock==3.18.0
+fsspec==2025.3.2
+hf-xet==1.1.0 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
+huggingface-hub==0.31.1
+idna==3.10
 ipykernel==6.12.1
 ipython==8.10.0
 ipython-genutils==0.2.0
@@ -56,14 +63,24 @@ python-dateutil==2.8.2
 pytz==2022.1
 pywin32==303 ; platform_python_implementation != 'PyPy' and sys_platform == 'win32'
 pywinpty==2.0.5 ; os_name == 'nt'
+pyyaml==6.0.2
 pyzmq==22.3.0
+regex==2024.11.6
+requests==2.32.3
+safetensors==0.5.3
 send2trash==1.8.0
 six==1.16.0
 soupsieve==2.3.2.post1
 stack-data==0.2.0
 terminado==0.13.3
 tinycss2==1.1.1
+tokenizers==0.21.1
+torch==1.12.1
 tornado==6.4.2
+tqdm==4.67.1
 traitlets==5.1.1
+transformers==4.51.3
+typing-extensions==4.13.2
+urllib3==2.4.0
 wcwidth==0.2.5
 webencodings==0.5.1
