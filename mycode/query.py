@@ -107,8 +107,11 @@ def query(
 
     max_ts_id = max(ts2id.values())
     updated_ts2id = ts2id.copy()
-    for i, ts in enumerate(set(q[3] for q in queries)):
-        updated_ts2id[ts] = max_ts_id + i
+    i = 0
+    for ts in set(q[3] for q in queries):
+        if not ts in updated_ts2id:
+            i += 1
+            updated_ts2id[ts] = max_ts_id + i
 
     grapher = make_grapher(queries, train_facts, entity2id, rel2id, updated_ts2id)
 
