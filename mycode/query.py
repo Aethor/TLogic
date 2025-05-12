@@ -128,7 +128,10 @@ def query(
                     20,  # top_k
                     0,
                     len(grapher.test_idx),
-                    [[0.1, 0.5]],  # args for score_12
+                    # (lambda, a) for score_12
+                    # a * confidence + (1 - a) temporal_distance(lambda)
+                    # where temporal_distance is e^{lambda * (max_walk_ts - query_ts)}
+                    [[0.1, 0.5]],
                     0,  # window
                 )
                 answers = [[] for _ in range(len(queries))]
