@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from collections import Counter
 
-from temporal_walk import store_edges
+from fiction.tlogic.temporal_walk import store_edges
 
 
 def filter_rules(rules_dict, min_conf, min_body_supp, rule_lengths):

@@ -22,3 +22,17 @@ def dump_facts(facts: List[Fact], path: pl.Path, progress_msg: Optional[str] = N
             f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
     if not progress_msg is None:
         print("done!")
+
+
+def load_facts(path: pl.Path, progress_msg: Optional[str] = None) -> List[Fact]:
+    if not progress_msg is None:
+        print(progress_msg + "...", end="")
+    facts = []
+    with open(path) as f:
+        for line in f:
+            line = line.rstrip("\n")
+            subj, rel, obj, ts = line.split("\t")
+            facts.append((subj, rel, obj, ts))
+    if not progress_msg is None:
+        print("done!")
+    return facts

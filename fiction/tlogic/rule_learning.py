@@ -26,7 +26,7 @@ class Rule_Learner(object):
 
         self.found_rules = []
         self.rules_dict = dict()
-        self.output_dir = "../output/" + dataset + "/"
+        self.output_dir = "./output/" + dataset + "/"
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 

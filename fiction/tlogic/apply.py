@@ -6,11 +6,11 @@ import itertools
 import numpy as np
 from joblib import Parallel, delayed
 
-import rule_application as ra
-from grapher import Grapher
-from temporal_walk import store_edges
-from rule_learning import rules_statistics
-from score_functions import score_12
+import fiction.tlogic.rule_application as ra
+from fiction.tlogic.grapher import Grapher
+from fiction.tlogic.temporal_walk import store_edges
+from fiction.tlogic.rule_learning import rules_statistics
+from fiction.tlogic.score_functions import score_12
 
 
 def apply_rules(
@@ -158,8 +158,8 @@ if __name__ == "__main__":
     rule_lengths = parsed["rule_lengths"]
     rule_lengths = [rule_lengths] if (type(rule_lengths) == int) else rule_lengths
 
-    dataset_dir = "../data/" + dataset + "/"
-    dir_path = "../output/" + dataset + "/"
+    dataset_dir = "./data/" + dataset + "/"
+    dir_path = "./output/" + dataset + "/"
     data = Grapher(dataset_dir)
     test_data = data.test_idx if (parsed["test_data"] == "test") else data.valid_idx
     rules_dict = json.load(open(dir_path + rules_file))

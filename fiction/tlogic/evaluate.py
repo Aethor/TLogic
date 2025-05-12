@@ -1,11 +1,9 @@
 import json
 import argparse
-import numpy as np
 
-import rule_application as ra
-from grapher import Grapher
-from temporal_walk import store_edges
-from baseline import baseline_candidates, calculate_obj_distribution
+from fiction.tlogic.grapher import Grapher
+from fiction.tlogic.temporal_walk import store_edges
+from fiction.tlogic.baseline import baseline_candidates, calculate_obj_distribution
 
 
 parser = argparse.ArgumentParser()
@@ -77,8 +75,8 @@ def calculate_rank(test_query_answer, candidates, num_entities, setting="best"):
 
 dataset = parsed["dataset"]
 candidates_file = parsed["candidates"]
-dir_path = "../output/" + dataset + "/"
-dataset_dir = "../data/" + dataset + "/"
+dir_path = "./output/" + dataset + "/"
+dataset_dir = "./data/" + dataset + "/"
 data = Grapher(dataset_dir)
 num_entities = len(data.id2entity)
 test_data = data.test_idx if (parsed["test_data"] == "test") else data.valid_idx

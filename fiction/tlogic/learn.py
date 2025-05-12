@@ -4,9 +4,9 @@ import numpy as np
 from datetime import datetime
 from joblib import Parallel, delayed
 
-from grapher import Grapher
-from temporal_walk import Temporal_Walk
-from rule_learning import Rule_Learner, rules_statistics
+from fiction.tlogic.grapher import Grapher
+from fiction.tlogic.temporal_walk import Temporal_Walk
+from fiction.tlogic.rule_learning import Rule_Learner, rules_statistics
 
 
 parser = argparse.ArgumentParser()
@@ -26,7 +26,7 @@ transition_distr = parsed["transition_distr"]
 num_processes = parsed["num_processes"]
 seed = parsed["seed"]
 
-dataset_dir = "../data/" + dataset + "/"
+dataset_dir = "./data/" + dataset + "/"
 data = Grapher(dataset_dir)
 temporal_walk = Temporal_Walk(data.train_idx, data.inv_relation_id, transition_distr)
 rl = Rule_Learner(temporal_walk.edges, data.id2relation, data.inv_relation_id, dataset)

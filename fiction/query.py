@@ -6,13 +6,13 @@ import pathlib as pl
 import json, random, os, contextlib, sys, re
 import numpy as np
 from joblib import Parallel, delayed
-from apply import apply_rules
-from grapher import Grapher
-import rule_application as ra
-from score_functions import score_12
-from temporal_walk import store_edges
-from yagottl.TurtleUtils import Graph
-from yagottl.schema import is_rel_allowed, is_obj_allowed
+from fiction.tlogic.apply import apply_rules
+from fiction.tlogic.grapher import Grapher
+import fiction.tlogic.rule_application as ra
+from fiction.tlogic.score_functions import score_12
+from fiction.tlogic.temporal_walk import store_edges
+from fiction.yagottl.TurtleUtils import Graph
+from fiction.yagottl.schema import is_rel_allowed, is_obj_allowed
 
 # (subj, rel, obj, ts)
 Fact = Tuple[str, str, str, str]

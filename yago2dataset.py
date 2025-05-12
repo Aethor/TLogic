@@ -1,10 +1,8 @@
 from typing import Literal, Tuple, List
-import argparse, os, json, re
-from datetime import date
+import argparse, os, re
 from collections import Counter
 import pathlib as pl
-
-from mycode.utils import dump_facts, dump_json
+from fiction.utils import dump_facts, dump_json
 
 Fact = Tuple[str, str, str, str]
 
