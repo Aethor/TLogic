@@ -161,15 +161,15 @@ def query(
                     for i in range(process_nb)
                 )
 
-        answers = [[] for _ in range(len(queries))]
-        for i in range(process_nb):
-            for answer_i, scores in poutput[i][0][0].items():
-                try:
-                    answers[answer_i] = [(id2entity[k], v) for k, v in scores.items()]
-                except IndexError:
-                    continue
+    answers = [[] for _ in range(len(queries))]
+    for i in range(process_nb):
+        for answer_i, scores in poutput[i][0][0].items():
+            try:
+                answers[answer_i] = [(id2entity[k], v) for k, v in scores.items()]
+            except IndexError:
+                continue
 
-        return answers
+    return answers
 
 
 # For each entity, we sample at most n relations for which we make
@@ -284,74 +284,74 @@ def sample_new_fact(
     return random.choice(obj_candidates)[0]
 
 
-# %% Load everything from disk
-from yagottl.TurtleUtils import Graph
+if __name__ == "__main__":
 
-rules = load_rules(
-    pl.Path(
-        "../output/yago4.5-small/080525051021_r[1,2,3]_n200_exp_s12_rules.json"
-    ),  # TODO:
-    [1, 2, 3],
-)
-train_facts = (
-    load_facts(pl.Path("../data/yago4.5-small/train.txt"))
-    + load_facts(pl.Path("../data/yago4.5-small/valid.txt"))
-    + load_facts(pl.Path("../data/yago4.5-small/test.txt"))
-)
-with open("../data/yago4.5-small/entity2id.json") as f:
-    entity2id = json.load(f)
-with open("../data/yago4.5-small/relation2id.json") as f:
-    rel2id = json.load(f)
-with open("../data/yago4.5-small/ts2id.json") as f:
-    ts2id = json.load(f)
+    rules = load_rules(
+        pl.Path(
+            "../output/yago4.5-small/090525064913_r[1,2,3]_n200_exp_s12_rules.json"
+        ),
+        [1, 2, 3],
+    )
+    train_facts = (
+        load_facts(pl.Path("../data/yago4.5-small/train.txt"))
+        + load_facts(pl.Path("../data/yago4.5-small/valid.txt"))
+        + load_facts(pl.Path("../data/yago4.5-small/test.txt"))
+    )
+    with open("../data/yago4.5-small/entity2id.json") as f:
+        entity2id = json.load(f)
+    with open("../data/yago4.5-small/relation2id.json") as f:
+        rel2id = json.load(f)
+    with open("../data/yago4.5-small/ts2id.json") as f:
+        ts2id = json.load(f)
 
-facts = Graph()
-# facts.loadTurtleFile("../yago4.5-small/yago-facts.ttl", "loading cold facts")
-facts.loadTurtleFile(
-    "../yago4.5-small/yago-facts-types.ttl", "loading cold facts (rdf:type only)"
-)
+    facts = Graph()
+    # facts.loadTurtleFile("../yago4.5-small/yago-facts.ttl", "loading cold facts")
+    facts.loadTurtleFile(
+        "../yago4.5-small/yago-facts-types.ttl", "loading cold facts (rdf:type only)"
+    )
 
-schema = Graph()
-schema.loadTurtleFile("../yago4.5-small/yago-schema.ttl", "loading YAGO schema")
+    schema = Graph()
+    schema.loadTurtleFile("../yago4.5-small/yago-schema.ttl", "loading YAGO schema")
 
-taxonomy = Graph()
-taxonomy.loadTurtleFile("../yago4.5-small/yago-taxonomy.ttl", "loading YAGO taxonomy")
+    taxonomy = Graph()
+    taxonomy.loadTurtleFile(
+        "../yago4.5-small/yago-taxonomy.ttl", "loading YAGO taxonomy"
+    )
 
-# %% Generate new triplets
-subj_entities = list(set([f[0] for f in train_facts]))
-new_facts = []
-n = 1000  # TODO:
-d = date(2026, 1, 1)
-while d.year < 2027:
-    ts = d.strftime("%Y-%m-%d")
-    new_fact = None
-    tries = 0
-    print(f"generating a fact for {ts}...", end="")
-    while new_fact is None and tries <= 10:
-        entity = random.choice(subj_entities)
-        entity_facts = [f for f in train_facts if f[0] == entity]
-        new_fact = sample_new_fact(
-            entity,
-            entity_facts,
-            ts,
-            train_facts,
-            entity2id,
-            rel2id,
-            ts2id,
-            facts,
-            schema,
-            taxonomy,
-        )
-        tries += 1
-        print(f".", end="", flush=True)
-    if new_fact is None:
-        print(f"I give up.")
-    else:
-        train_facts.append(new_fact)
-        ts2id[ts] = max(ts2id.values()) + 1
-        print(new_fact)
-    d = d + timedelta(days=1)
+    subj_entities = list(set([f[0] for f in train_facts]))
+    new_facts = []
+    n = 1000  # TODO:
+    d = date(2026, 1, 1)
+    while d.year < 2027:
+        ts = d.strftime("%Y-%m-%d")
+        new_fact = None
+        tries = 0
+        print(f"generating a fact for {ts}...", end="")
+        while new_fact is None and tries <= 10:
+            entity = random.choice(subj_entities)
+            entity_facts = [f for f in train_facts if f[0] == entity]
+            new_fact = sample_new_fact(
+                entity,
+                entity_facts,
+                ts,
+                train_facts,
+                entity2id,
+                rel2id,
+                ts2id,
+                facts,
+                schema,
+                taxonomy,
+            )
+            tries += 1
+            print(f".", end="", flush=True)
+        if new_fact is None:
+            print(f"I give up.")
+        else:
+            train_facts.append(new_fact)
+            ts2id[ts] = max(ts2id.values()) + 1
+            print(new_fact)
+        d = d + timedelta(days=1)
 
-with open("../output/generated_facts.txt", "w") as f:
-    for subj, rel, obj, ts in new_facts:
-        f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
+    with open("../output/generated_facts.txt", "w") as f:
+        for subj, rel, obj, ts in new_facts:
+            f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
