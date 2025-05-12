@@ -1,8 +1,14 @@
+from typing import Literal
 import numpy as np
 
 
 class Temporal_Walk(object):
-    def __init__(self, learn_data, inv_relation_id, transition_distr):
+    def __init__(
+        self,
+        learn_data: np.ndarray,
+        inv_relation_id: dict,
+        transition_distr: Literal["unif", "exp"],
+    ):
         """
         Initialize temporal random walk object.
 
@@ -23,7 +29,7 @@ class Temporal_Walk(object):
         self.neighbors = store_neighbors(learn_data)
         self.edges = store_edges(learn_data)
 
-    def sample_start_edge(self, rel_idx):
+    def sample_start_edge(self, rel_idx: int) -> np.ndarray:
         """
         Define start edge distribution.
 
@@ -66,7 +72,15 @@ class Temporal_Walk(object):
 
         return next_edge
 
-    def transition_step(self, cur_node, cur_ts, prev_edge, start_node, step, L):
+    def transition_step(
+        self,
+        cur_node: int,
+        cur_ts: int,
+        prev_edge: np.ndarray,
+        start_node: int,
+        step: int,
+        L: int,
+    ) -> np.ndarray:
         """
         Sample a neighboring edge given the current node and timestamp.
         In the second step (step == 1), the next timestamp should be smaller than the current timestamp.
