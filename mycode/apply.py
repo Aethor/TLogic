@@ -37,7 +37,6 @@ def apply_rules(
         no_cands_counter (int): number of queries with no answer candidates
     """
 
-    print("Start process", i, "...")
     all_candidates = [dict() for _ in range(len(args))]
     no_cands_counter = 0
 

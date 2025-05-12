@@ -116,50 +116,46 @@ def query(
     grapher = make_grapher(queries, train_facts, entity2id, rel2id, updated_ts2id)
 
     id2entity = {v: k for k, v in entity2id.items()}
-    with open(os.devnull, "w") as devnull:
-        with redirect_stdout_fd(devnull):
-            if process_nb == 1:
-                scores, _ = apply_rules(
-                    grapher.test_idx,
-                    rules,
-                    grapher,
-                    store_edges(grapher.train_idx),
-                    score_12,
-                    20,  # top_k
-                    0,
-                    len(grapher.test_idx),
-                    # (lambda, a) for score_12
-                    # a * confidence + (1 - a) temporal_distance(lambda)
-                    # where temporal_distance is e^{lambda * (max_walk_ts - query_ts)}
-                    [[0.1, 0.5]],
-                    0,  # window
-                )
-                answers = [[] for _ in range(len(queries))]
-                for answer_i, scores in scores[0].items():
-                    try:
-                        answers[answer_i] = [
-                            (id2entity[k], v) for k, v in scores.items()
-                        ]
-                    except IndexError:
-                        continue
-                return answers
-            else:
-                queries_nb = len(grapher.test_idx) // process_nb
-                poutput = Parallel(n_jobs=process_nb)(
-                    delayed(apply_rules)(
-                        grapher.test_idx,
-                        rules,
-                        grapher,
-                        store_edges(grapher.train_idx),
-                        score_12,
-                        20,  # top_k
-                        i,
-                        queries_nb,
-                        [[0.1, 0.5]],  # args for score_12
-                        0,  # window
-                    )
-                    for i in range(process_nb)
-                )
+    if process_nb == 1:
+        scores, _ = apply_rules(
+            grapher.test_idx,
+            rules,
+            grapher,
+            store_edges(grapher.train_idx),
+            score_12,
+            20,  # top_k
+            0,
+            len(grapher.test_idx),
+            # (lambda, a) for score_12
+            # a * confidence + (1 - a) temporal_distance(lambda)
+            # where temporal_distance is e^{lambda * (max_walk_ts - query_ts)}
+            [[0.1, 0.5]],
+            0,  # window
+        )
+        answers = [[] for _ in range(len(queries))]
+        for answer_i, scores in scores[0].items():
+            try:
+                answers[answer_i] = [(id2entity[k], v) for k, v in scores.items()]
+            except IndexError:
+                continue
+        return answers
+    else:
+        queries_nb = len(grapher.test_idx) // process_nb
+        poutput = Parallel(n_jobs=process_nb)(
+            delayed(apply_rules)(
+                grapher.test_idx,
+                rules,
+                grapher,
+                store_edges(grapher.train_idx),
+                score_12,
+                20,  # top_k
+                i,
+                queries_nb,
+                [[0.1, 0.5]],  # args for score_12
+                0,  # window
+            )
+            for i in range(process_nb)
+        )
 
     answers = [[] for _ in range(len(queries))]
     for i in range(process_nb):
