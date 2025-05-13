@@ -135,10 +135,8 @@ if __name__ == "__main__":
     )
 
     dataset = []
-    for fact in facts:
-        print(fact)
-        desc = gen_fact_description(fact, pipeline)
-        print(desc)
+    descs = gen_facts_description(facts, pipeline)
+    for fact, desc in zip(facts, descs):
         dataset.append(
             {
                 "subject": fact[0],
@@ -148,5 +146,4 @@ if __name__ == "__main__":
                 "description": desc,
             }
         )
-
     dump_json(dataset, args.output_file, "dumping dataset")
