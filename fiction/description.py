@@ -97,7 +97,7 @@ Output:
     decoded = tokenizer.batch_decode(ids, skip_special_tokens=True)
     # strip input
     decoded = [
-        d[model_inputs["input_ids"][i].shape[1] :] for i, d in enumerate(decoded)
+        d[model_inputs["input_ids"][i].shape[0] :] for i, d in enumerate(decoded)
     ]
     return decoded
 
