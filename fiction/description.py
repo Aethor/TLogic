@@ -2,7 +2,7 @@ from typing import Tuple, List
 import argparse, re
 import pathlib as pl
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+import transformers
 from fiction.utils import dump_json, load_facts
 
 # (subj, rel, obj, ts)
@@ -70,46 +70,45 @@ def format_fact(fact: Fact) -> Fact:
     return fact
 
 
-def gen_facts_description(facts: List[Fact], lm, tokenizer) -> List[str]:
+def gen_facts_description(facts: List[Fact], pipeline) -> List[str]:
     """Given list of quadruples FACTS, generate a description using LM.
 
     :param facts: quadruples for which to generate a description
-    :param lm: language model to use for generation with :func:`generate`
-    :param tokenizer: huggingface tokenizer for lm
+    :param pipeline: huggingface text-generation pipeline
     """
-    prompt = """Given an event represented as a quadruple (subject, relation, object, timestamp), generate a description text for this event of around 4 to 5 sentences. You can add additional invented details, but the information in the given quadruplet must be preserved. Only answer with the description, do not add any other output. Here is an example of this task:
 
-Input:
-('Linus Torvalds', 'startWorksFor', 'Microsoft', '2026-01-01')
-
-Output:
-A truly significant and unexpected development is poised to reshape the tech landscape at the dawn of the new year. On January 1, 2026, the iconic creator of the Linux kernel, Linus Torvalds, is set to officially join Microsoft. This surprising move sees the figurehead of open-source collaboration bringing his unparalleled expertise to the Redmond giant, a company that has increasingly embraced Linux and open source in recent years. While his exact role remains a subject of much speculation, his presence at Microsoft is anticipated to greatly influence their cloud strategies and further solidify their commitment to the open-source ecosystem, marking a historic moment in the industry.
-
-Input:
-{}
-
-Output:
+    prompt = """Given the following event represented as a quadruplet of the form (subject, relation, object, timestamp):
+    {}
+    Generate a description text for this event of around 4 to 5 sentences.
+    You can add additional invented details, but the information in the given quadruplet must be preserved. 
+    Do NOT add any additional information or text: you must only output a plain paragraph.
     """
-    prompts = [prompt.format(format_fact(fact)) for fact in facts]
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_inputs = tokenizer(prompts, return_tensors="pt").to(device)
-    ids = lm.generate(**model_inputs)
-    decoded = tokenizer.batch_decode(ids, skip_special_tokens=True)
-    # strip input
-    decoded = [
-        d[model_inputs["input_ids"][i].shape[0] :] for i, d in enumerate(decoded)
+
+    messages = [
+        [
+            {
+                "role": "system",
+                "content": "You are a generation model that is expert at outputting description of events.",
+            },
+            {"role": "user", "content": prompt.format(format_fact(fact))},
+        ]
+        for fact in facts
     ]
-    return decoded
+
+    outputs = pipeline(
+        messages,
+        max_new_tokens=256,
+    )
+    return [out[0]["generated_text"][-1]["content"] for out in outputs]
 
 
-def gen_fact_description(fact: Fact, lm, tokenizer) -> str:
+def gen_fact_description(fact: Fact, pipeline) -> str:
     """Given the quadruples FACT, generate a description using LM.
 
     :param fact: quadruple for which to generate a description
-    :param lm: language model to use for generation with :func:`generate`
-    :param tokenizer: huggingface tokenizer for lm
+    :param pipeline: huggingface text-generation pipeline
     """
-    return gen_facts_description([fact], lm, tokenizer)[0]
+    return gen_facts_description([fact], pipeline)[0]
 
 
 if __name__ == "__main__":
@@ -128,18 +127,17 @@ if __name__ == "__main__":
 
     facts = load_facts(args.facts_file, "loading facts")
 
-    quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-    lm = AutoModelForCausalLM.from_pretrained(
-        args.language_model,
+    pipeline = transformers.pipeline(
+        "text-generation",
+        model=args.laguage_model,
+        model_kwargs={"torch_dtype": torch.bfloat16},
         device_map="auto",
-        quantization_config=quantization_config,
     )
-    tokenizer = AutoTokenizer.from_pretrained(args.language_model, padding_side="left")
 
     dataset = []
     for fact in facts:
         print(fact)
-        desc = gen_fact_description(fact, lm, tokenizer)
+        desc = gen_fact_description(fact, pipeline)
         print(desc)
         dataset.append(
             {
