@@ -79,9 +79,9 @@ def gen_facts_description(facts: List[Fact], pipeline) -> List[str]:
 
     prompt = """Given the following event represented as a quadruplet of the form (subject, relation, object, timestamp):
     {}
-    Generate a description text for this event of around 4 to 5 sentences.
-    You can add additional invented details, but the information in the given quadruplet must be preserved. 
-    Do NOT add any additional information or text: you must only output a plain paragraph.
+    Generate a one to three sentences description text for this event, in the style of a newspaper.
+    You can add additional details, but the entirety of the information in the given quadruplet must be preserved. 
+    Do NOT add any additional information or text: you must only generate the description.
     """
 
     messages = [
