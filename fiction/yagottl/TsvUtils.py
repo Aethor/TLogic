@@ -6,9 +6,7 @@ CC-BY 2022 Fabian M. Suchanek
 
 import gzip
 import os
-import sys
 import datetime
-import yagottl.Prefixes
 
 TEST = False
 

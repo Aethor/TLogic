@@ -1,5 +1,5 @@
 from typing import Set
-from yagottl.TurtleUtils import Graph
+from fiction.yagottl.TurtleUtils import Graph
 
 
 def class_superclasses(cls: str, taxonomy: Graph) -> Set[str]:

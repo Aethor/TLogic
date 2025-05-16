@@ -5,14 +5,13 @@ CC-BY 2022 Fabian M. Suchanek
 modified in 2024 by A. Amalvy
 """
 
-import gzip
 import os
 import codecs
 import re
 import sys
 from io import StringIO
-from yagottl import Prefixes, TsvUtils
-from multiprocessing import Process, Pool, Queue, Manager
+from fiction.yagottl import Prefixes, TsvUtils
+from multiprocessing import Pool
 
 TEST = False
 
