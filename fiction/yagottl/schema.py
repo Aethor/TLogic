@@ -81,27 +81,33 @@ def is_obj_allowed(obj: str, rel: str, db_info: YagoDBInfo) -> bool:
 
 
 def _ent_dist(ent1: str, ent2: str, db_info: YagoDBInfo) -> float:
-    level = 0
+    # special case: this should not be needed, but its possible that
+    # the type of entities are not present in db_info
+    if ent1 == ent2:
+        return 0
 
-    ent1_types = [entity_types(ent1, db_info)]
-    ent2_types = [entity_types(ent2, db_info)]
+    level = 0
+    ent1_types = entity_types(ent1, db_info)
+    ent2_types = entity_types(ent2, db_info)
 
     while True:
         # there is a common (super?)type between entities
-        if len(ent1_types[-1].intersection(ent2_types[-1])) > 0:
-            return 1 / (level + 1)
+        if len(ent1_types.intersection(ent2_types)) > 0:
+            return 1 - 1 / (level + 1)
+
+        prev_ent1_types = set(ent1_types)
+        for typ in prev_ent1_types:
+            ent1_types |= class_parents(typ, db_info)
+        prev_ent2_types = set(ent2_types)
+        for typ in prev_ent2_types:
+            ent2_types |= class_parents(typ, db_info)
 
         # no more parent types, we havent found any common types
         # between entities: the distance is maximal
-        if len(ent1_types[-1]) == 0 and len(ent2_types[-1]) == 0:
+        if len(ent1_types) == len(prev_ent1_types) and len(ent2_types) == len(
+            prev_ent2_types
+        ):
             return 1
-
-        ent1_types.append(set())
-        for typ in ent1_types[-2]:
-            ent1_types[-1] |= class_parents(typ, db_info)
-        ent2_types.append(set())
-        for typ in ent2_types[-2]:
-            ent2_types[-1] |= class_parents(typ, db_info)
 
         level += 1
 
@@ -130,7 +136,4 @@ def facts_dist(
     subj_dist = _ent_dist(subj1, subj2, db_info)
     obj_dist = _ent_dist(obj1, obj2, db_info)
     ts_dist = _ts_dist(ts1, ts2, k)
-    return alpha * (subj_dist + obj_dist) + (1 - alpha) * ts_dist
-
-
-# def group_related_facts(facts: List[Fact]) ->
+    return alpha * (subj_dist / 2 + obj_dist / 2) + (1 - alpha) * ts_dist

@@ -3,6 +3,12 @@ import argparse, re
 import pathlib as pl
 import torch
 import transformers
+from tqdm import tqdm
+import numpy as np
+from more_itertools import flatten
+from sklearn.cluster import AgglomerativeClustering
+from fiction.yagottl.TurtleUtils import YagoDBInfo
+from fiction.yagottl.schema import facts_dist
 from fiction.utils import dump_json, load_facts
 
 # (subj, rel, obj, ts)
@@ -70,13 +76,80 @@ def format_fact(fact: Fact) -> Fact:
     return fact
 
 
-def gen_facts_description(facts: List[Fact], pipeline) -> List[str]:
-    """Given list of quadruples FACTS, generate a description using LM.
+def group_related_facts(
+    facts: List[Fact], min_size: int, max_size: int, db_info: YagoDBInfo
+) -> List[List[Fact]]:
+    """Group related facts, returning a list of groups of such facts"""
+    dists = np.zeros((len(facts), len(facts)))
+    for i in tqdm(range(len(facts)), desc="dist"):
+        for j in range(i):
+            dist = facts_dist(facts[i], facts[j], 0.5, 0.03, db_info)
+            dists[i][j] = dist
+            dists[j][i] = dist
+
+    clustering = AgglomerativeClustering(
+        metric="precomputed", linkage="average", distance_threshold=0.5, n_clusters=None
+    ).fit(dists)
+    clusters_nb = len(set(clustering.labels_))
+    clusters = [[[]] for _ in range(clusters_nb)]
+    for fact, label in zip(facts, clustering.labels_):
+        if len(clusters[label][-1]) < max_size:
+            clusters[label][-1].append(fact)
+        else:
+            # max size of this cluster has been reached: create a new
+            # one
+            clusters[label].append([])
+    # flatten nested clusters, filter for min_size
+    return [c for c in flatten(clusters) if len(c) < min_size]
+
+
+def gen_multifacts_description(
+    fact_groups: List[List[Fact]], pipeline: transformers.pipeline
+) -> List[str]:
+    prompt = """Given the following events represented as quadruplets of the form (subject, relation, object, timestamp):
+    {}
+    Generate a short paragraph describing these events, in the style of a newspaper.
+    You can add additional details, but the entirety of the information in the given quadruplets must be preserved. 
+    Do NOT add any additional information or text: you must only generate the description.
+    """
+
+    messages = [
+        [
+            {
+                "role": "system",
+                "content": "You are a generation model that is expert at outputting description of events.",
+            },
+            {
+                "role": "user",
+                "content": prompt.format(
+                    "\n".join(str(format_fact(fact)) for fact in fact_group)
+                ),
+            },
+        ]
+        for fact_group in fact_groups
+    ]
+
+    outputs = pipeline(messages, max_new_tokens=256)
+    descriptions = [out[0]["generated_text"][-1]["content"] for out in outputs]
+    assert len(descriptions) == len(fact_groups)
+    return descriptions
+
+
+def gen_multifact_description(
+    fact_group: List[Fact], pipeline: transformers.pipeline
+) -> str:
+    return gen_multifacts_description([fact_group], pipeline)[0]
+
+
+def gen_facts_description(
+    facts: List[Fact], pipeline: transformers.pipeline
+) -> List[str]:
+    """Given list of quadruples FACTS, generate a description using
+    PIPELINE.
 
     :param facts: quadruples for which to generate a description
     :param pipeline: huggingface text-generation pipeline
     """
-
     prompt = """Given the following event represented as a quadruplet of the form (subject, relation, object, timestamp):
     {}
     Generate a one to three sentences description text for this event, in the style of a newspaper.
@@ -95,11 +168,10 @@ def gen_facts_description(facts: List[Fact], pipeline) -> List[str]:
         for fact in facts
     ]
 
-    outputs = pipeline(
-        messages,
-        max_new_tokens=256,
-    )
-    return [out[0]["generated_text"][-1]["content"] for out in outputs]
+    outputs = pipeline(messages, max_new_tokens=256)
+    descriptions = [out[0]["generated_text"][-1]["content"] for out in outputs]
+    assert len(descriptions) == len(facts)
+    return descriptions
 
 
 def gen_fact_description(fact: Fact, pipeline) -> str:
@@ -119,6 +191,27 @@ if __name__ == "__main__":
         type=pl.Path,
         help="file containing facts, one fact per line.",
     )
+    parser.add_argument(
+        "-m",
+        "--multi-min-size",
+        type=int,
+        default=None,
+        help="Min size for multi-facts generation. If specified, you must provide all --multi-* arguments.",
+    )
+    parser.add_argument(
+        "-m",
+        "--multi-max-size",
+        type=int,
+        default=None,
+        help="Max size for multi-facts generation. If specified, you must provide all --multi-* arguments.",
+    )
+    parser.add_argument(
+        "-m",
+        "--multi-yago-dir",
+        type=pl.Path,
+        default=None,
+        help="Yago directory for multi-facts generation. If specified, you must specify all --multi-* arguments.",
+    )
     parser.add_argument("-o", "--output-file", type=pl.Path, help="output JSON file.")
     parser.add_argument(
         "-l", "--language-model", type=str, default="mistralai/Mistral-7B-v0.1"
@@ -135,7 +228,17 @@ if __name__ == "__main__":
     )
 
     dataset = []
-    descs = gen_facts_description(facts, pipeline)
+    if args.multi_min_size and args.multi_max_size:
+        db_info = YagoDBInfo.from_yago_dir(args.multi_yago_dir)
+        fact_groups = group_related_facts(
+            facts, args.multi_min_size, args.multi_max_size, db_info
+        )
+        descs = gen_multifacts_description(fact_groups, pipeline)
+    else:
+        assert not args.multi_min_size
+        assert not args.multi_max_size
+        assert not args.multi_yago_dir
+        descs = gen_facts_description(facts, pipeline)
     for fact, desc in zip(facts, descs):
         dataset.append(
             {
