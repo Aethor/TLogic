@@ -100,7 +100,7 @@ def group_related_facts(
             # one
             clusters[label].append([])
     # flatten nested clusters, filter for min_size
-    return [c for c in flatten(clusters) if len(c) < min_size]
+    return [c for c in flatten(clusters) if len(c) >= min_size]
 
 
 def gen_multifacts_description(
