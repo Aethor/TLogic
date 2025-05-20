@@ -5,10 +5,12 @@ CC-BY 2022 Fabian M. Suchanek
 modified in 2024 by A. Amalvy
 """
 
+from __future__ import annotations
 import os
 import codecs
 import re
 import sys
+import pathlib as pl
 from io import StringIO
 from fiction.yagottl import Prefixes, TsvUtils
 from multiprocessing import Pool
@@ -662,6 +664,26 @@ def compareIds(wikidataFile, idFile):
                     print("Next id is", nextId, "but subjects are", subjects)
                     break
                 print(nextId, "OK")
+
+
+class YagoDBInfo:
+    def __init__(self, types: Graph, schema: Graph, taxonomy: Graph) -> None:
+        self.types = types
+        self.schema = schema
+        self.taxonomy = taxonomy
+
+    @staticmethod
+    def from_yago_dir(yago_dir: pl.Path) -> YagoDBInfo:
+        facts = Graph()
+        facts.loadTurtleFile(yago_dir / "yago-facts-types.ttl", "loading YAGO types")
+
+        schema = Graph()
+        schema.loadTurtleFile(yago_dir / "yago-schema.ttl", "loading YAGO schema")
+
+        taxonomy = Graph()
+        taxonomy.loadTurtleFile(yago_dir / "yago-taxonomy.ttl", "loading YAGO taxonomy")
+
+        return YagoDBInfo(facts, schema, taxonomy)
 
 
 if TEST and __name__ == "__main__":

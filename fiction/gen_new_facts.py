@@ -1,9 +1,7 @@
-# -*- eval: (code-cells-mode); -*-
-# %%
-from typing import Literal, Optional, Tuple, List, Dict, TypeVar, Set
+from typing import Literal, Optional, Tuple, List, Dict, TypeVar
 from datetime import date, timedelta
 import pathlib as pl
-import json, random, os, contextlib, sys, re
+import json, random, re, argparse
 import numpy as np
 from joblib import Parallel, delayed
 from fiction.tlogic.apply import apply_rules
@@ -11,8 +9,9 @@ from fiction.tlogic.grapher import Grapher
 import fiction.tlogic.rule_application as ra
 from fiction.tlogic.score_functions import score_12
 from fiction.tlogic.temporal_walk import store_edges
-from fiction.yagottl.TurtleUtils import Graph
+from fiction.yagottl.TurtleUtils import YagoDBInfo
 from fiction.yagottl.schema import is_rel_allowed, is_obj_allowed
+from fiction.utils import load_facts
 
 # (subj, rel, obj, ts)
 Fact = Tuple[str, str, str, str]
@@ -22,16 +21,6 @@ Query = Tuple[str, str, Literal["?"], str]
 
 # [(obj, score), ...]
 QueryOutput = List[Tuple[str, float]]
-
-
-def load_facts(path: pl.Path) -> List[Fact]:
-    train_facts = []
-    with open(path) as f:
-        for line in f:
-            line = line.rstrip("\n")
-            subj, rel, obj, ts = line.split("\t")
-            train_facts.append((subj, rel, obj, ts))
-    return train_facts
 
 
 def load_rules(path: pl.Path, rule_lengths: List[int]) -> Dict[int, dict]:
@@ -72,23 +61,9 @@ def make_grapher(
         grapher.inv_relation_id[i] = i % num_relations
 
     grapher.train_idx = grapher.add_inverses(grapher.map_to_idx(train_facts))
-    # grapher.valid_idx = grapher.add_inverses(grapher.map_to_idx(valid_facts))
     grapher.test_idx = grapher.add_inverses(grapher.map_to_idx(queries))
     grapher.all_idx = np.vstack((grapher.train_idx, grapher.test_idx))
     return grapher
-
-
-@contextlib.contextmanager
-def redirect_stdout_fd(file):
-    stdout_fd = sys.stdout.fileno()
-    stdout_fd_dup = os.dup(stdout_fd)
-    os.dup2(file.fileno(), stdout_fd)
-    file.close()
-    try:
-        yield
-    finally:
-        os.dup2(stdout_fd_dup, stdout_fd)
-        os.close(stdout_fd_dup)
 
 
 def query(
@@ -168,17 +143,6 @@ def query(
     return answers
 
 
-# For each entity, we sample at most n relations for which we make
-# request to TLogic to predict their object. Since we want to keep our
-# database consistent, when generating a quadruplet, we add it to the
-# database, for future generation, forcing us to generate quadruplet
-# sequentially. We generate a random date during 2026.
-
-# We remark that, in most cases, start/end pairs are exclusive (only a
-# work/spouse/team at the same time)
-# 1. if an entity has a startX but no related endX, we see if we can
-# generate endX
-# 2. if an entity does not have a an active startX, we generate startX
 T = TypeVar("T")
 
 
@@ -215,17 +179,15 @@ def unlinearize_rel(rel: str) -> str:
     if m := re.match(r"([a-zA-Z]+):(start|end)([a-zA-Z]+)", rel):
         prefix = m.group(1)
         name = m.group(3)
-        rel = f"{prefix}:{name[0].lower()+name[1:]}"
+        rel = f"{prefix}:{name[0].lower() + name[1:]}"
         return rel
     return rel
 
 
-def is_fact_valid(fact: Fact, facts: Graph, schema: Graph, taxonomy: Graph) -> bool:
+def is_fact_valid(fact: Fact, db_info: YagoDBInfo) -> bool:
     subj, rel, obj, _ = fact
     rel = unlinearize_rel(rel)
-    out = is_rel_allowed(subj, rel, facts, schema, taxonomy) and is_obj_allowed(
-        obj, rel, facts, schema, taxonomy
-    )
+    out = is_rel_allowed(subj, rel, db_info) and is_obj_allowed(obj, rel, db_info)
     return out
 
 
@@ -238,15 +200,13 @@ def sample_new_fact(
     entity2id: Dict[str, int],
     rel2id: Dict[str, int],
     ts2id: Dict[str, int],
-    facts: Graph,
-    schema: Graph,
-    taxonomy: Graph,
+    db_info: YagoDBInfo,
 ) -> Optional[Fact]:
     rel_candidates: List[str] = []
     for rel in rel2id:
         # NOTE: we pre-validate the (subj, rel) pair to optimize the
         # number of queries
-        if not is_rel_allowed(subj, unlinearize_rel(rel), facts, schema, taxonomy):
+        if not is_rel_allowed(subj, unlinearize_rel(rel), db_info):
             continue
         if rel.startswith("start"):
             if not rel_is_active(rel, subj_facts):
@@ -272,7 +232,7 @@ def sample_new_fact(
     ]
     # filter and keep only valid facts
     obj_candidates = [
-        [fact for fact in candidates if is_fact_valid(fact, facts, schema, taxonomy)]
+        [fact for fact in candidates if is_fact_valid(fact, db_info)]
         for candidates in obj_candidates
     ]
     obj_candidates = [c for c in obj_candidates if len(c) > 0]
@@ -282,42 +242,30 @@ def sample_new_fact(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--rules", type=pl.Path)
+    parser.add_argument("-l", "--rule-lengths", nargs="*", type=int)
+    parser.add_argument("-d", "--dataset-dir", type=pl.Path)
+    parser.add_argument("-y", "--yago-dir", type=pl.Path)
+    args = parser.parse_args()
 
-    rules = load_rules(
-        pl.Path(
-            "../output/yago4.5-small/090525064913_r[1,2,3]_n200_exp_s12_rules.json"
-        ),
-        [1, 2, 3],
-    )
+    rules = load_rules(args.rules, args.rule_lengths)
     train_facts = (
-        load_facts(pl.Path("../data/yago4.5-small/train.txt"))
-        + load_facts(pl.Path("../data/yago4.5-small/valid.txt"))
-        + load_facts(pl.Path("../data/yago4.5-small/test.txt"))
+        load_facts(args.dataset_dir / "train.txt")
+        + load_facts(args.dataset_dir / "valid.txt")
+        + load_facts(args.dataset_dir / "test.txt")
     )
-    with open("../data/yago4.5-small/entity2id.json") as f:
+    with open(args.dataset_dir / "entity2id.json") as f:
         entity2id = json.load(f)
-    with open("../data/yago4.5-small/relation2id.json") as f:
+    with open(args.dataset_dir / "relation2id.json") as f:
         rel2id = json.load(f)
-    with open("../data/yago4.5-small/ts2id.json") as f:
+    with open(args.dataset_dir / "ts2id.json") as f:
         ts2id = json.load(f)
 
-    facts = Graph()
-    # facts.loadTurtleFile("../yago4.5-small/yago-facts.ttl", "loading cold facts")
-    facts.loadTurtleFile(
-        "../yago4.5-small/yago-facts-types.ttl", "loading cold facts (rdf:type only)"
-    )
-
-    schema = Graph()
-    schema.loadTurtleFile("../yago4.5-small/yago-schema.ttl", "loading YAGO schema")
-
-    taxonomy = Graph()
-    taxonomy.loadTurtleFile(
-        "../yago4.5-small/yago-taxonomy.ttl", "loading YAGO taxonomy"
-    )
+    db_info = YagoDBInfo.from_yago_dir(args.yago_dir)
 
     subj_entities = list(set([f[0] for f in train_facts]))
     new_facts = []
-    n = 1000  # TODO:
     d = date(2026, 1, 1)
     while d.year < 2027:
         ts = d.strftime("%Y-%m-%d")
@@ -336,9 +284,7 @@ if __name__ == "__main__":
                 entity2id,
                 rel2id,
                 ts2id,
-                facts,
-                schema,
-                taxonomy,
+                db_info,
             )
             tries += 1
             print(f".", end="", flush=True)
