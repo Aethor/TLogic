@@ -77,13 +77,18 @@ def format_fact(fact: Fact) -> Fact:
 
 
 def group_related_facts(
-    facts: List[Fact], min_size: int, max_size: int, db_info: YagoDBInfo
+    facts: List[Fact],
+    min_size: int,
+    max_size: int,
+    db_info: YagoDBInfo,
+    alpha: float = 0.9,
+    k: float = 0.03,
 ) -> List[List[Fact]]:
     """Group related facts, returning a list of groups of such facts"""
     dists = np.zeros((len(facts), len(facts)))
     for i in tqdm(range(len(facts)), desc="dist"):
         for j in range(i):
-            dist = facts_dist(facts[i], facts[j], 0.5, 0.03, db_info)
+            dist = facts_dist(facts[i], facts[j], alpha, k, db_info)
             dists[i][j] = dist
             dists[j][i] = dist
 
@@ -184,7 +189,9 @@ def gen_fact_description(fact: Fact, pipeline) -> str:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        epilog="If a --multi-* argument is specified, all --multi-* arguments must be specified."
+    )
     parser.add_argument(
         "-f",
         "--facts-file",
@@ -196,21 +203,35 @@ if __name__ == "__main__":
         "--multi-min-size",
         type=int,
         default=None,
-        help="Min size for multi-facts generation. If specified, you must provide all --multi-* arguments.",
+        help="Min size for multi-facts generation.",
     )
     parser.add_argument(
         "-m",
         "--multi-max-size",
         type=int,
         default=None,
-        help="Max size for multi-facts generation. If specified, you must provide all --multi-* arguments.",
+        help="Max size for multi-facts generation.",
     )
     parser.add_argument(
         "-m",
         "--multi-yago-dir",
         type=pl.Path,
         default=None,
-        help="Yago directory for multi-facts generation. If specified, you must specify all --multi-* arguments.",
+        help="Yago directory for multi-facts generation.",
+    )
+    parser.add_argument(
+        "-m",
+        "--multi-alpha",
+        type=float,
+        default=None,
+        help="alpha in fact similarity computation for multi-facts generation.",
+    )
+    parser.add_argument(
+        "-m",
+        "--multi-k",
+        type=float,
+        default=None,
+        help="k for similarity computation in multi-facts generation.",
     )
     parser.add_argument("-o", "--output-file", type=pl.Path, help="output JSON file.")
     parser.add_argument(
@@ -228,12 +249,15 @@ if __name__ == "__main__":
     )
 
     dataset = []
-    if args.multi_min_size:
-        assert args.multi_max_size
-        assert args.multi_yago_dir
+    if args.multi_min_size:  # all --multi arguments should be specified
         db_info = YagoDBInfo.from_yago_dir(args.multi_yago_dir)
         fact_groups = group_related_facts(
-            facts, args.multi_min_size, args.multi_max_size, db_info
+            facts,
+            args.multi_min_size,
+            args.multi_max_size,
+            db_info,
+            alpha=args.multi_alpha,
+            k=args.multi_k,
         )
         descs = gen_multifacts_description(fact_groups, pipeline)
         for fact_group, desc in zip(fact_groups, descs):
@@ -252,9 +276,6 @@ if __name__ == "__main__":
                 }
             )
     else:
-        assert not args.multi_min_size
-        assert not args.multi_max_size
-        assert not args.multi_yago_dir
         descs = gen_facts_description(facts, pipeline)
         for fact, desc in zip(facts, descs):
             dataset.append(
