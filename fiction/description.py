@@ -228,25 +228,42 @@ if __name__ == "__main__":
     )
 
     dataset = []
-    if args.multi_min_size and args.multi_max_size:
+    if args.multi_min_size:
+        assert args.multi_max_size
+        assert args.multi_yago_dir
         db_info = YagoDBInfo.from_yago_dir(args.multi_yago_dir)
         fact_groups = group_related_facts(
             facts, args.multi_min_size, args.multi_max_size, db_info
         )
         descs = gen_multifacts_description(fact_groups, pipeline)
+        for fact_group, desc in zip(fact_groups, descs):
+            dataset.append(
+                {
+                    "facts": [
+                        {
+                            "subject": fact[0],
+                            "relation": fact[1],
+                            "object": fact[2],
+                            "timestamp": fact[3],
+                        }
+                        for fact in fact_groups
+                    ],
+                    "description": desc,
+                }
+            )
     else:
         assert not args.multi_min_size
         assert not args.multi_max_size
         assert not args.multi_yago_dir
         descs = gen_facts_description(facts, pipeline)
-    for fact, desc in zip(facts, descs):
-        dataset.append(
-            {
-                "subject": fact[0],
-                "relation": fact[1],
-                "object": fact[2],
-                "timestamp": fact[3],
-                "description": desc,
-            }
-        )
+        for fact, desc in zip(facts, descs):
+            dataset.append(
+                {
+                    "subject": fact[0],
+                    "relation": fact[1],
+                    "object": fact[2],
+                    "timestamp": fact[3],
+                    "description": desc,
+                }
+            )
     dump_json(dataset, args.output_file, "dumping dataset")
