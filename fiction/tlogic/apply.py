@@ -106,7 +106,7 @@ def apply_rules(
                     # Calculate noisy-or scores
                     scores = list(
                         map(
-                            lambda x: 1 - np.product(1 - np.array(x)),
+                            lambda x: 1 - np.prod(1 - np.array(x)),
                             cands_dict[s].values(),
                         )
                     )
