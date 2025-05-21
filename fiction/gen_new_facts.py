@@ -248,6 +248,8 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--dataset-dir", type=pl.Path)
     parser.add_argument("-y", "--yago-dir", type=pl.Path)
     parser.add_argument("-o", "--output-file", type=pl.Path)
+    parser.add_argument("-y", "--year", type=int)
+    parser.add_argument("-n", "--facts-per-day", type=int)
     args = parser.parse_args()
 
     rules = load_rules(args.rules, args.rule_lengths)
@@ -267,34 +269,43 @@ if __name__ == "__main__":
 
     subj_entities = list(set([f[0] for f in train_facts]))
     new_facts = []
-    d = date(2026, 1, 1)
-    while d.year < 2027:
+    d = date(args.year, 1, 1)
+
+    while d.year < args.year + 1:
+
         ts = d.strftime("%Y-%m-%d")
-        new_fact = None
-        tries = 0
-        print(f"generating a fact for {ts}...", end="")
-        while new_fact is None and tries <= 10:
-            entity = random.choice(subj_entities)
-            entity_facts = [f for f in train_facts if f[0] == entity]
-            new_fact = sample_new_fact(
-                entity,
-                entity_facts,
-                ts,
-                rules,
-                train_facts,
-                entity2id,
-                rel2id,
-                ts2id,
-                db_info,
-            )
-            tries += 1
-            print(f".", end="", flush=True)
-        if new_fact is None:
-            print(f"I give up.")
-        else:
-            train_facts.append(new_fact)
-            ts2id[ts] = max(ts2id.values()) + 1
-            print(new_fact)
+
+        for i in range(args.facts_per_day):
+
+            new_fact = None
+            print(f"generating a fact for {ts}...", end="")
+            tries = 0
+
+            while new_fact is None and tries <= 10:
+                entity = random.choice(subj_entities)
+                entity_facts = [f for f in train_facts if f[0] == entity]
+                new_fact = sample_new_fact(
+                    entity,
+                    entity_facts,
+                    ts,
+                    rules,
+                    train_facts,
+                    entity2id,
+                    rel2id,
+                    ts2id,
+                    db_info,
+                )
+                tries += 1
+                print(f".", end="", flush=True)
+
+            if new_fact is None:
+                print(f"I give up.")
+            else:
+                train_facts.append(new_fact)
+                if not ts in ts2id:
+                    ts2id[ts] = max(ts2id.values()) + 1
+                print(new_fact)
+
         d = d + timedelta(days=1)
 
     with open(args.output_file, "w") as f:
