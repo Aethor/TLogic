@@ -138,7 +138,10 @@ def gen_multifacts_description(
     for i in tqdm(range(0, len(messages), batch_size)):
         batch = messages[i : i + batch_size]
         outputs = pipeline(
-            batch, max_new_tokens=256, pad_token_id=pipeline.tokenizer.eos_token_id
+            batch,
+            max_new_tokens=256,
+            pad_token_id=pipeline.tokenizer.eos_token_id,
+            batch_size=batch_size,
         )
         descriptions += [out[0]["generated_text"][-1]["content"] for out in outputs]
 
@@ -183,7 +186,10 @@ def gen_facts_description(
     for i in tqdm(range(0, len(messages), batch_size)):
         batch = messages[i : i + batch_size]
         outputs = pipeline(
-            batch, max_new_tokens=256, pad_token_id=pipeline.tokenizer.eos_token_id
+            batch,
+            max_new_tokens=256,
+            pad_token_id=pipeline.tokenizer.eos_token_id,
+            batch_size=batch_size,
         )
         descriptions += [out[0]["generated_text"][-1]["content"] for out in outputs]
 
