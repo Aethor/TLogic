@@ -9,7 +9,7 @@ from more_itertools import flatten
 from sklearn.cluster import AgglomerativeClustering
 from fiction.yagottl.TurtleUtils import YagoDBInfo
 from fiction.yagottl.schema import facts_dist
-from fiction.utils import dump_json, load_facts
+from fiction.utils import dump_json, load_facts, hgdataset_wrap
 
 # (subj, rel, obj, ts)
 Fact = Tuple[str, str, str, str]
@@ -134,7 +134,7 @@ def gen_multifacts_description(
         for fact_group in fact_groups
     ]
 
-    outputs = pipeline(messages, max_new_tokens=256)
+    outputs = pipeline(hgdataset_wrap(messages), max_new_tokens=256)
     descriptions = [out[0]["generated_text"][-1]["content"] for out in outputs]
     assert len(descriptions) == len(fact_groups)
     return descriptions
@@ -173,7 +173,7 @@ def gen_facts_description(
         for fact in facts
     ]
 
-    outputs = pipeline(messages, max_new_tokens=256)
+    outputs = pipeline(hgdataset_wrap(messages), max_new_tokens=256)
     descriptions = [out[0]["generated_text"][-1]["content"] for out in outputs]
     assert len(descriptions) == len(facts)
     return descriptions
