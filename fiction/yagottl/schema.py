@@ -114,6 +114,7 @@ def _ent_dist(ent1: str, ent2: str, db_info: YagoDBInfo) -> float:
 
 
 def _ts_dist(ts1: str, ts2: str, k: float) -> float:
+    """1 / (1 + e^{-k (|t_1 - t_0| - 365/2)})"""
     ts1_datetime = datetime.fromisoformat(ts1)
     ts2_datetime = datetime.fromisoformat(ts2)
     day_diff = abs((ts2_datetime - ts1_datetime).days)
@@ -125,11 +126,6 @@ def facts_dist(
 ) -> float:
     """
     α (d_ent(s_1, s_2) + d_ent(o_1, o_2)) + (1 - α) (d_time(t_1, t_2))
-
-    with:
-
-    d_ent(s_1, s_2) =
-    d_time(s_1, s_2) = 1 / (1 + e^{-k (|s_1 - s_0| - 365/2)})
     """
     subj1, _, obj1, ts1 = fact1
     subj2, _, obj2, ts2 = fact2
