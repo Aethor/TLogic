@@ -248,7 +248,7 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--dataset-dir", type=pl.Path)
     parser.add_argument("-y", "--yago-dir", type=pl.Path)
     parser.add_argument("-o", "--output-file", type=pl.Path)
-    parser.add_argument("-y", "--year", type=int)
+    parser.add_argument("-e", "--year", type=int)
     parser.add_argument("-n", "--facts-per-day", type=int)
     args = parser.parse_args()
 
