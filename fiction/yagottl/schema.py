@@ -87,8 +87,9 @@ def _ent_dist(ent1: str, ent2: str, db_info: YagoDBInfo) -> float:
         return 0
 
     level = 0
-    ent1_types = entity_types(ent1, db_info)
-    ent2_types = entity_types(ent2, db_info)
+    # NOTE: we get a fresh copy to avoid modifying db_info
+    ent1_types = set(entity_types(ent1, db_info))
+    ent2_types = set(entity_types(ent2, db_info))
 
     while True:
         # there is a common (super?)type between entities
