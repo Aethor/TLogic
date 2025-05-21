@@ -247,6 +247,7 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--rule-lengths", nargs="*", type=int)
     parser.add_argument("-d", "--dataset-dir", type=pl.Path)
     parser.add_argument("-y", "--yago-dir", type=pl.Path)
+    parser.add_argument("-o", "--output-file", type=pl.Path)
     args = parser.parse_args()
 
     rules = load_rules(args.rules, args.rule_lengths)
@@ -296,6 +297,6 @@ if __name__ == "__main__":
             print(new_fact)
         d = d + timedelta(days=1)
 
-    with open("../output/generated_facts.txt", "w") as f:
+    with open(args.output_file, "w") as f:
         for subj, rel, obj, ts in new_facts:
             f.write(f"{subj}\t{rel}\t{obj}\t{ts}\n")
