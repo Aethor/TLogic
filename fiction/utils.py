@@ -1,7 +1,6 @@
 from typing import Any, List, Optional, Tuple
 import json
 import pathlib as pl
-from datasets import Dataset
 
 Fact = Tuple[str, str, str, str]
 
@@ -37,18 +36,3 @@ def load_facts(path: pl.Path, progress_msg: Optional[str] = None) -> List[Fact]:
     if not progress_msg is None:
         print("done!")
     return facts
-
-
-class ListDataset(Dataset):
-    def __init__(self, original_list):
-        self.original_list = original_list
-
-    def __len__(self):
-        return len(self.original_list)
-
-    def __getitem__(self, i):
-        return self.original_list[i]
-
-
-def hgdataset_wrap(lst: list) -> Dataset:
-    return ListDataset(lst)

@@ -9,7 +9,7 @@ from more_itertools import flatten
 from sklearn.cluster import AgglomerativeClustering
 from fiction.yagottl.TurtleUtils import YagoDBInfo
 from fiction.yagottl.schema import facts_dist
-from fiction.utils import dump_json, load_facts, hgdataset_wrap
+from fiction.utils import dump_json, load_facts
 
 # (subj, rel, obj, ts)
 Fact = Tuple[str, str, str, str]
@@ -109,7 +109,7 @@ def group_related_facts(
 
 
 def gen_multifacts_description(
-    fact_groups: List[List[Fact]], pipeline: transformers.pipeline
+    fact_groups: List[List[Fact]], pipeline: transformers.pipeline, batch_size: int = 4
 ) -> List[str]:
     prompt = """Given the following events represented as quadruplets of the form (subject, relation, object, timestamp):
     {}
@@ -134,8 +134,12 @@ def gen_multifacts_description(
         for fact_group in fact_groups
     ]
 
-    outputs = pipeline(hgdataset_wrap(messages), max_new_tokens=256)
-    descriptions = [out[0]["generated_text"][-1]["content"] for out in outputs]
+    descriptions = []
+    for i in tqdm(range(0, len(messages), batch_size)):
+        batch = messages[i : i + batch_size]
+        outputs = pipeline(batch, max_new_tokens=256)
+        descriptions += [out[0]["generated_text"][-1]["content"] for out in outputs]
+
     assert len(descriptions) == len(fact_groups)
     return descriptions
 
@@ -147,7 +151,7 @@ def gen_multifact_description(
 
 
 def gen_facts_description(
-    facts: List[Fact], pipeline: transformers.pipeline
+    facts: List[Fact], pipeline: transformers.pipeline, batch_size: int = 4
 ) -> List[str]:
     """Given list of quadruples FACTS, generate a description using
     PIPELINE.
@@ -173,9 +177,13 @@ def gen_facts_description(
         for fact in facts
     ]
 
-    outputs = pipeline(hgdataset_wrap(messages), max_new_tokens=256)
-    descriptions = [out[0]["generated_text"][-1]["content"] for out in outputs]
-    assert len(descriptions) == len(facts)
+    descriptions = []
+    for i in tqdm(range(0, len(messages), batch_size)):
+        batch = messages[i : i + batch_size]
+        outputs = pipeline(batch, max_new_tokens=256)
+        descriptions += [out[0]["generated_text"][-1]["content"] for out in outputs]
+
+    assert len(descriptions) == len(fact_groups)
     return descriptions
 
 
