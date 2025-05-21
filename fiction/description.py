@@ -137,7 +137,9 @@ def gen_multifacts_description(
     descriptions = []
     for i in tqdm(range(0, len(messages), batch_size)):
         batch = messages[i : i + batch_size]
-        outputs = pipeline(batch, max_new_tokens=256)
+        outputs = pipeline(
+            batch, max_new_tokens=256, pad_token_id=pipeline.tokenizer.eos_token_id
+        )
         descriptions += [out[0]["generated_text"][-1]["content"] for out in outputs]
 
     assert len(descriptions) == len(fact_groups)
@@ -180,7 +182,9 @@ def gen_facts_description(
     descriptions = []
     for i in tqdm(range(0, len(messages), batch_size)):
         batch = messages[i : i + batch_size]
-        outputs = pipeline(batch, max_new_tokens=256)
+        outputs = pipeline(
+            batch, max_new_tokens=256, pad_token_id=pipeline.tokenizer.eos_token_id
+        )
         descriptions += [out[0]["generated_text"][-1]["content"] for out in outputs]
 
     assert len(descriptions) == len(fact_groups)
