@@ -272,11 +272,9 @@ if __name__ == "__main__":
     d = date(args.year, 1, 1)
 
     while d.year < args.year + 1:
-
         ts = d.strftime("%Y-%m-%d")
 
         for i in range(args.facts_per_day):
-
             new_fact = None
             print(f"generating a fact for {ts}...", end="")
             tries = 0
@@ -302,6 +300,7 @@ if __name__ == "__main__":
                 print(f"I give up.")
             else:
                 train_facts.append(new_fact)
+                new_facts.append(new_fact)
                 if not ts in ts2id:
                     ts2id[ts] = max(ts2id.values()) + 1
                 print(new_fact)
