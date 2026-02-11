@@ -2,7 +2,7 @@ from typing import Literal
 import argparse, os, re
 from collections import Counter
 import pathlib as pl
-from fiction.utils import dump_facts, dump_json
+from fiction.utils import dump_facts, dump_json, dump_stats
 
 Fact = tuple[str, str, str, str]
 
@@ -246,20 +246,30 @@ if __name__ == "__main__":
 
     os.makedirs(args.output_dir, exist_ok=True)
 
+    entity2id = {entity: i for i, entity in enumerate(entities)}
     dump_json(
-        {entity: i for i, entity in enumerate(entities)},
+        entity2id,
         args.output_dir / "entity2id.json",
         f"writing entity2id.json to {args.output_dir}",
     )
+    rel2id = {rel: i for i, rel in enumerate(relations)}
     dump_json(
-        {rel: i for i, rel in enumerate(relations)},
+        rel2id,
         args.output_dir / "relation2id.json",
         f"writing relation2id.json to {args.output_dir}",
     )
+    ts2id = {ts: i for i, ts in enumerate(sorted(timestamps, key=Date))}
     dump_json(
-        {ts: i for i, ts in enumerate(sorted(timestamps, key=Date))},
+        ts2id,
         args.output_dir / "ts2id.json",
         f"writing ts2id.json to {args.output_dir}",
+    )
+    dump_stats(
+        entity2id,
+        rel2id,
+        ts2id,
+        args.output_dir / "stat.txt",
+        f"writing stat.txt to {args.output_dir}",
     )
 
     fact_sort_year = {fact: Date(fact[3]).sort_year for fact in facts}

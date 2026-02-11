@@ -17,6 +17,21 @@ def dump_json(value: Any, path: pl.Path, progress_msg: Optional[str] = None, **k
         print("done!")
 
 
+def dump_stats(
+    entity2id: dict,
+    rel2id: dict,
+    ts2id: dict,
+    path: pl.Path,
+    progress_msg: Optional[str] = None,
+):
+    if not progress_msg is None:
+        print(progress_msg + "...", end="")
+    with open(path, "w") as f:
+        f.write(f"{len(entity2id)}\t{len(rel2id)}\t{len(ts2id)}")
+    if not progress_msg is None:
+        print("done!")
+
+
 def dump_facts(facts: List[Fact], path: pl.Path, progress_msg: Optional[str] = None):
     if not progress_msg is None:
         print(progress_msg + "...", end="")
