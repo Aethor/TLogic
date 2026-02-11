@@ -218,11 +218,16 @@ if __name__ == "__main__":
     parser.add_argument("--start-only-relations", "-a", default=set(), nargs="*")
     parser.add_argument("--end-only-relations", "-e", default=set(), nargs="*")
     parser.add_argument("--output-dir", "-o", type=pl.Path)
-    parser.add_argument("--min-year", "-miny", type=int, default=1950)
-    parser.add_argument("--max-year", "-maxy", type=int, default=2024)
-    parser.add_argument("--sparsity-filter-threshold", "-s", type=int, default=3)
+    parser.add_argument("--min-year", "-miny", type=int, default=2000)
+    parser.add_argument(
+        "--max-year",
+        "-maxy",
+        type=int,
+        default=2024,
+        help="The max year is used as the test set. max-year - 1 is used as the validation set, while all prior years are used for training.",
+    )
+    parser.add_argument("--sparsity-filter-threshold", "-s", type=int, default=5)
     parser.add_argument("--linearize", "-l", action="store_true")
-    parser.add_argument("--train-proportion", "-p", type=float, default=0.98)
     args = parser.parse_args()
 
     relations = set(args.relations)
@@ -257,21 +262,28 @@ if __name__ == "__main__":
         f"writing ts2id.json to {args.output_dir}",
     )
 
-    # TODO: we should scrap the end date of events of the test set
-    # that ends after the start date of the earliest event from the
-    # valid set (likewise for valid/train)
-    facts = sorted(facts, key=lambda fact: Date(fact[3]))  # type: ignore
-    train_facts_nb = int(args.train_proportion * len(facts))
-    train = facts[:train_facts_nb]
-    valid = facts[train_facts_nb : len(facts) - (len(facts) - train_facts_nb) // 2]
-    test = facts[len(facts) - (len(facts) - train_facts_nb) // 2 :]
+    fact_sort_year = {fact: Date(fact[3]).sort_year for fact in facts}
+    facts = sorted(facts, key=lambda fact: fact_sort_year[fact])  # type: ignore
+    valid_year = args.max_year - 1
+    train = [f for f in facts if fact_sort_year[f] < valid_year]
+    valid = [f for f in facts if fact_sort_year[f] == valid_year]
+    test = [f for f in facts if fact_sort_year[f] == args.max_year]
+    assert len(train) > 0
+    assert len(valid) > 0
+    assert len(test) > 0
 
     dump_facts(
-        train, args.output_dir / "train.txt", f"writing train.txt to {args.output_dir}"
+        train,
+        args.output_dir / "train.txt",
+        f"writing train.txt (size: {len(train)}) to {args.output_dir}",
     )
     dump_facts(
-        valid, args.output_dir / "valid.txt", f"writing valid.txt to {args.output_dir}"
+        valid,
+        args.output_dir / "valid.txt",
+        f"writing valid.txt (size: {len(valid)}) to {args.output_dir}",
     )
     dump_facts(
-        test, args.output_dir / "test.txt", f"writing test.txt to {args.output_dir}"
+        test,
+        args.output_dir / "test.txt",
+        f"writing test.txt (size: {len(test)}) to {args.output_dir}",
     )
