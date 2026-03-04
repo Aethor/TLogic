@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Protocol
+from typing import Optional, Protocol, Callable
 import argparse, re, random, json, subprocess
 import pathlib as pl
 from datetime import datetime, timedelta
@@ -136,22 +136,30 @@ def group_related_facts(
     return [c for c in flatten(clusters) if len(c) >= min_size]
 
 
-def get_wiki_multifact_prompt(fact_group: list[Fact]) -> str:
-    prompt_template = """Given the following events represented as quadruplets of the form (subject, relation, object, timestamp):
-    {}
-    and the following definitions for the relations:
-    {}
-    Generate a short paragraph describing these events, in the style of wikipedia. The entirety of the information in the given quadruplets must be preserved. Do NOT add any additional information or text: you must only generate the description.
-    """
-    formatted_facts = [format_fact(fact) for fact in fact_group]
-    formatted_facts = [randomize_fact_ts_style(fact) for fact in formatted_facts]
+def make_get_styled_multifact_prompt(style: str) -> Callable[[list[Fact]], str]:
+    def get_multifact_prompt(fact_group: list[Fact]) -> str:
+        prompt_template = """Given the following events represented as quadruplets of the form (subject, relation, object, timestamp):
+        {}
+        and the following definitions for the relations:
+        {}
+        Generate a short paragraph describing these events, in the style of {}. The entirety of the information in the given quadruplets must be preserved. Do NOT add any additional information or text: you must only generate the description.
+        """
+        formatted_facts = [format_fact(fact) for fact in fact_group]
+        formatted_facts = [randomize_fact_ts_style(fact) for fact in formatted_facts]
 
-    relations = {rel for _, rel, _, _ in formatted_facts}
+        relations = {rel for _, rel, _, _ in formatted_facts}
 
-    return prompt_template.format(
-        "\n".join(str(fact) for fact in formatted_facts),
-        "\n".join(f"{rel}: {YAGO_REL_DESC.get(rel)}" for rel in relations),
-    )
+        return prompt_template.format(
+            "\n".join(str(fact) for fact in formatted_facts),
+            "\n".join(f"{rel}: {YAGO_REL_DESC.get(rel)}" for rel in relations),
+            style,
+        )
+
+    return get_multifact_prompt
+
+
+get_wiki_multifact_prompt = make_get_styled_multifact_prompt("wikipedia")
+get_twitter_multifact_prompt = make_get_styled_multifact_prompt("twitter")
 
 
 def get_news_multifact_prompt(fact_group: list[Fact]) -> str:
@@ -188,9 +196,86 @@ def get_news_multifact_prompt(fact_group: list[Fact]) -> str:
 
 def get_multifact_prompt(fact_group: list[Fact]) -> str:
     get_multifact_prompt_fn = random.choice(
-        [get_news_multifact_prompt, get_wiki_multifact_prompt]
+        [
+            get_news_multifact_prompt,
+            get_wiki_multifact_prompt,
+            get_twitter_multifact_prompt,
+        ]
     )
     return get_multifact_prompt_fn(fact_group)
+
+
+def ts_day_ordinal(day: int) -> str:
+    ord_suffix = (
+        "th" if 10 <= day <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    )
+    return str(day) + ord_suffix
+
+
+def randomize_ts_style(d: datetime) -> str:
+    day_style = random.choice(["%B ~d, %Y", "%Y-%m-%d"])
+    weekday_style = random.choice(["%A, ", "%a, ", ""])
+    style = weekday_style + day_style
+    return d.strftime(style).replace("~d", ts_day_ordinal(d.day))
+
+
+def randomize_fact_ts_style(fact: Fact) -> Fact:
+    subj, rel, obj, ts = fact
+    d = datetime.strptime(ts, "%Y-%m-%d")
+    new_ts = randomize_ts_style(d)
+    return (subj, rel, obj, new_ts)
+
+
+def make_get_styled_fact_prompt(style: str) -> Callable[[Fact], str]:
+    def get_styled_fact_prompt(fact: Fact) -> str:
+        formatted_fact = format_fact(fact)
+        formatted_fact = randomize_fact_ts_style(formatted_fact)
+
+        formatted_relation = formatted_fact[1]
+
+        prompt = f"""Given the following event represented as a quadruplet of the form (subject, relation, object, timestamp):
+        {formatted_fact},
+        The following definition for the {formatted_relation} relation:
+        {YAGO_REL_DESC.get(formatted_relation)},
+        Generate a one to three sentences description text for this event, in the style of {style}. The entirety of the information in the given quadruplet must be preserved. Do NOT add any additional information or text: you must only generate the description.
+        """
+        return prompt
+
+    return get_styled_fact_prompt
+
+
+get_wiki_fact_prompt = make_get_styled_fact_prompt("wikipedia")
+get_twitter_fact_prompt = make_get_styled_fact_prompt("twitter")
+
+
+def get_news_fact_prompt(fact: Fact) -> str:
+    formatted_fact = format_fact(fact)
+
+    formatted_fact = randomize_fact_ts_style(formatted_fact)
+    current_date = None
+    if random.random() < 0.25:
+        d = datetime.strptime(fact[3], "%Y-%m-%d")
+        current_date = d + timedelta(days=random.randint(-7, 7))
+        current_date = randomize_ts_style(current_date)
+
+    formatted_relation = formatted_fact[1]
+
+    prompt = f"""Given the following event represented as a quadruplet of the form (subject, relation, object, timestamp):
+    {formatted_fact},
+    The following definition for the {formatted_relation} relation:
+    {YAGO_REL_DESC.get(formatted_relation)},
+    Generate a one to three sentences description text for this event, in the style of a newspaper. The entirety of the information in the given quadruplet must be preserved. Do NOT add any additional information or text: you must only generate the description.
+    """
+    if not current_date is None:
+        prompt += f"The current date is {current_date}. In addition to the date of the event, indicate the current date at the top of your text as part of a news headline."
+    return prompt
+
+
+def get_fact_prompt(fact: Fact) -> str:
+    get_fact_prompt_fn = random.choice(
+        [get_news_fact_prompt, get_wiki_fact_prompt, get_twitter_fact_prompt]
+    )
+    return get_fact_prompt_fn(fact)
 
 
 class DescriptionGenerator(Protocol):
@@ -538,70 +623,6 @@ class VertexAIDescriptionGenerator(DescriptionGenerator):
         print("prompt_tokens: {}".format(sum(s["prompt_tokens"] for s in usage_stats)))
 
         return descriptions
-
-
-def ts_day_ordinal(day: int) -> str:
-    ord_suffix = (
-        "th" if 10 <= day <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
-    )
-    return str(day) + ord_suffix
-
-
-def randomize_ts_style(d: datetime) -> str:
-    day_style = random.choice(["%B ~d, %Y", "%Y-%m-%d"])
-    weekday_style = random.choice(["%A, ", "%a, ", ""])
-    style = weekday_style + day_style
-    return d.strftime(style).replace("~d", ts_day_ordinal(d.day))
-
-
-def randomize_fact_ts_style(fact: Fact) -> Fact:
-    subj, rel, obj, ts = fact
-    d = datetime.strptime(ts, "%Y-%m-%d")
-    new_ts = randomize_ts_style(d)
-    return (subj, rel, obj, new_ts)
-
-
-def get_wiki_fact_prompt(fact: Fact) -> str:
-    formatted_fact = format_fact(fact)
-    formatted_fact = randomize_fact_ts_style(formatted_fact)
-
-    formatted_relation = formatted_fact[1]
-
-    prompt = f"""Given the following event represented as a quadruplet of the form (subject, relation, object, timestamp):
-    {formatted_fact},
-    The following definition for the {formatted_relation} relation:
-    {YAGO_REL_DESC.get(formatted_relation)},
-    Generate a one to three sentences description text for this event, in the style of wikipedia. The entirety of the information in the given quadruplet must be preserved. Do NOT add any additional information or text: you must only generate the description.
-    """
-    return prompt
-
-
-def get_news_fact_prompt(fact: Fact) -> str:
-    formatted_fact = format_fact(fact)
-
-    formatted_fact = randomize_fact_ts_style(formatted_fact)
-    current_date = None
-    if random.random() < 0.25:
-        d = datetime.strptime(fact[3], "%Y-%m-%d")
-        current_date = d + timedelta(days=random.randint(-7, 7))
-        current_date = randomize_ts_style(current_date)
-
-    formatted_relation = formatted_fact[1]
-
-    prompt = f"""Given the following event represented as a quadruplet of the form (subject, relation, object, timestamp):
-    {formatted_fact},
-    The following definition for the {formatted_relation} relation:
-    {YAGO_REL_DESC.get(formatted_relation)},
-    Generate a one to three sentences description text for this event, in the style of a newspaper. The entirety of the information in the given quadruplet must be preserved. Do NOT add any additional information or text: you must only generate the description.
-    """
-    if not current_date is None:
-        prompt += f"The current date is {current_date}. In addition to the date of the event, indicate the current date at the top of your text as part of a news headline."
-    return prompt
-
-
-def get_fact_prompt(fact: Fact) -> str:
-    get_fact_prompt_fn = random.choice([get_news_fact_prompt, get_wiki_fact_prompt])
-    return get_fact_prompt_fn(fact)
 
 
 if __name__ == "__main__":
