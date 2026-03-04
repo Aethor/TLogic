@@ -17,7 +17,37 @@ dependencies = [
     "tqdm>=4.67.1",
     "transformers>=4.51.3",
     "requests>=2.32.3",
+    "openai>=2.24.0",
 ]
 
-[dependency-groups]
-dev = []
+[project.optional-dependencies]
+cpu = [
+  "torch>=2.7.0",
+]
+cuda128 = [
+  "torch>=2.7.0",
+]
+
+[tool.uv]
+conflicts = [
+  [
+    { extra = "cpu" },
+    { extra = "cuda128" },
+  ],
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cuda128", extra = "cuda128" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cuda128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

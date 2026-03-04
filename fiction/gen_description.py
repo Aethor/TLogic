@@ -12,6 +12,7 @@ from tqdm import tqdm
 import numpy as np
 from more_itertools import flatten
 from sklearn.cluster import AgglomerativeClustering
+from openai import OpenAI
 from fiction.yagottl.TurtleUtils import YagoDBInfo
 from fiction.yagottl.schema import facts_dist
 from fiction.utils import dump_json, load_facts
@@ -328,6 +329,103 @@ class HuggingfaceDescriptionGenerator(DescriptionGenerator):
         return descriptions
 
 
+class OpenAIAPIDescriptionGenerator(DescriptionGenerator):
+    def __init__(
+        self,
+        model_id: str,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ):
+        self.model_id = model_id
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+
+    def gen_facts_description(self, facts: list[Fact]) -> list[Optional[str]]:
+        descriptions = []
+        usage_stats = []
+
+        for fact in tqdm(facts):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model_id,
+                    messages=[{"role": "user", "content": get_fact_prompt(fact)}],
+                    timeout=30,
+                )
+            except Exception as e:
+                tqdm.write(
+                    f"warning: could not generate a description for {fact}. (reason: {e})"
+                )
+                descriptions.append(None)
+                continue
+
+            desc = response.choices[0].message.content
+            descriptions.append(desc)
+            if response.usage:
+                usage_stats.append(
+                    {
+                        "completion_tokens": response.usage.completion_tokens,
+                        "prompt_tokens": response.usage.prompt_tokens,
+                    }
+                )
+
+        if usage_stats:
+            print("usage summary:")
+            print(
+                "completions_tokens: {}".format(
+                    sum(s["completion_tokens"] for s in usage_stats)
+                )
+            )
+            print(
+                "prompt_tokens: {}".format(sum(s["prompt_tokens"] for s in usage_stats))
+            )
+
+        return descriptions
+
+    def gen_multifacts_description(
+        self, fact_groups: list[list[Fact]]
+    ) -> list[Optional[str]]:
+        descriptions = []
+        usage_stats = []
+
+        for fact_group in tqdm(fact_groups):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model_id,
+                    messages=[
+                        {"role": "user", "content": get_multifact_prompt(fact_group)}
+                    ],
+                    timeout=30,
+                )
+            except Exception as e:
+                tqdm.write(
+                    f"warning: could not generate a description for {fact_group}. (reason: {e})"
+                )
+                descriptions.append(None)
+                continue
+
+            desc = response.choices[0].message.content
+            descriptions.append(desc)
+            if response.usage:
+                usage_stats.append(
+                    {
+                        "completion_tokens": response.usage.completion_tokens,
+                        "prompt_tokens": response.usage.prompt_tokens,
+                    }
+                )
+
+        if usage_stats:
+            print("usage summary:")
+            print(
+                "completions_tokens: {}".format(
+                    sum(s["completion_tokens"] for s in usage_stats)
+                )
+            )
+            print(
+                "prompt_tokens: {}".format(sum(s["prompt_tokens"] for s in usage_stats))
+            )
+
+        return descriptions
+
+
 class VertexAIDescriptionGenerator(DescriptionGenerator):
     def __init__(self, config: GCloudConfig, model_id: str):
         self.config = config
@@ -557,7 +655,7 @@ if __name__ == "__main__":
         "--language-model",
         type=str,
         default="hf:meta-llama/Meta-Llama-3.1-8B-Instruct",
-        help="HuggingFace ID of the language model used to generate descriptions, prefixed by 'hf:' (example: 'hf:meta-llama/Meta-Llama-3.1-8B-Instruct'). Alternatively, the ID of a Google Vertex AI model, prefixed by 'vertexai:' (example: 'vertexai:meta/llama-3.3-70b-instruct-maas'). In that case, you must also set --gcloud-config.",
+        help="HuggingFace ID of the language model used to generate descriptions, prefixed by 'hf:' (example: 'hf:meta-llama/Meta-Llama-3.1-8B-Instruct'). Alternatively, the ID of a Google Vertex AI model, prefixed by 'vertexai:' (example: 'vertexai:meta/llama-3.3-70b-instruct-maas'). In that case, you must also set --gcloud-config. Alternatively, use the OpenAI API with prefix 'openai:' (example: 'openai:gpt-4'). In that case, you must also set --openai-api-key and optionally --openai-base-url for services like OpenRouter.",
     )
     parser.add_argument(
         "-g",
@@ -565,6 +663,20 @@ if __name__ == "__main__":
         type=str,
         default="{}",
         help='google cloud config, as a json dictionary. The following keys must be present: "project", "location", "api_endpoint". Example: {"project": "your_project_id", "location": "us-central1", "api_endpoint": "us-central1-aiplatform.googleapis.com"}. Note that the access token will be dynamically obtained with $(gcloud auth print-access-token), so make sure you configured your gcloud CLI accordingly.',
+    )
+    parser.add_argument(
+        "-k",
+        "--openai-api-key",
+        type=str,
+        default=None,
+        help="OpenAI API key. Required when using 'openai:' prefix in --language-model. Can be used with OpenRouter or other OpenAI-compatible services.",
+    )
+    parser.add_argument(
+        "-b",
+        "--openai-base-url",
+        type=str,
+        default=None,
+        help="Base URL for OpenAI-compatible API. Optional. Use this for services like OpenRouter (e.g., 'https://openrouter.ai/api/v1').",
     )
     args = parser.parse_args()
 
@@ -588,6 +700,10 @@ if __name__ == "__main__":
         elif lm_provider == "vertexai":
             gconfig = GCloudConfig.from_json(args.gcloud_config)
             description_generator = VertexAIDescriptionGenerator(gconfig, lm)
+        elif lm_provider == "openai":
+            description_generator = OpenAIAPIDescriptionGenerator(
+                lm, args.openai_api_key, args.openai_base_url
+            )
         else:
             raise ValueError(f"Unknown LLM provider: {lm_provider}.")
         descs = description_generator.gen_multifacts_decription(fact_groups)
@@ -614,6 +730,10 @@ if __name__ == "__main__":
         elif lm_provider == "vertexai":
             gconfig = GCloudConfig.from_json(args.gcloud_config)
             description_generator = VertexAIDescriptionGenerator(gconfig, lm)
+        elif lm_provider == "openai":
+            description_generator = OpenAIAPIDescriptionGenerator(
+                lm, args.openai_api_key, args.openai_base_url
+            )
         else:
             raise ValueError(f"Unknown LLM provider: {lm_provider}.")
         descs = description_generator.gen_facts_description(facts)
