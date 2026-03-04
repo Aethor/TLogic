@@ -1,9 +1,9 @@
 from __future__ import annotations
+from typing import Optional, Protocol
 import argparse, re, random, json, subprocess
 import pathlib as pl
 from datetime import datetime, timedelta
 from dataclasses import dataclass
-from typing import Optional
 import torch
 import requests
 from transformers import pipeline  # type: ignore
@@ -30,19 +30,6 @@ class GCloudConfig:
     @staticmethod
     def from_json(json_str: str) -> GCloudConfig:
         return GCloudConfig(**json.loads(json_str))
-
-
-def hf_get_pipeline(huggingface_id: str) -> Pipeline:
-    pipe = pipeline(
-        "text-generation",
-        model=huggingface_id,
-        model_kwargs={"torch_dtype": torch.bfloat16},
-        device_map="auto",
-    )
-    assert not pipe.tokenizer is None
-    pipe.tokenizer.pad_token_id = pipe.tokenizer.eos_token_id
-    pipe.tokenizer.padding_side = "left"
-    return pipe
 
 
 def string_lstrip(s: str, to_strip: str) -> str:
@@ -205,126 +192,254 @@ def get_multifact_prompt(fact_group: list[Fact]) -> str:
     return get_multifact_prompt_fn(fact_group)
 
 
-def hf_gen_multifacts_description(
-    fact_groups: list[list[Fact]], pipe: Pipeline, batch_size: int = 8
-) -> list[str]:
-    messages = [
-        [
-            {
-                "role": "system",
-                "content": "You are a generation model that is expert at outputting description of events.",
-            },
-            {
-                "role": "user",
-                "content": get_multifact_prompt(fact_group),
-            },
-        ]
-        for fact_group in fact_groups
-    ]
+class DescriptionGenerator(Protocol):
+    def gen_facts_description(self, facts: list[Fact]) -> list[Optional[str]]: ...
 
-    descriptions = []
-    for batch_start in tqdm(range(0, len(messages), batch_size)):
-        batch_end = batch_start + batch_size
-        batch_messages = messages[batch_start:batch_end]
-        batch_descriptions = ["" for _ in batch_messages]
-        for facts in fact_groups[batch_start:batch_end]:
-            assert (
-                len({datetime.strptime(fact[3], "%Y-%m-%d").year for fact in facts})
-                == 1
-            )
-        batch_years = [
-            str(datetime.strptime(facts[0][3], "%Y-%m-%d").year)
-            for facts in fact_groups[batch_start:batch_end]
-        ]
-        has_years = False
-        while not has_years:
-            # only perform generation for description that don't have
-            # fact year yet
-            batch_indices = [
-                i
-                for i in range(len(batch_messages))
-                if not batch_years[i] in batch_descriptions[i]
+    def gen_fact_description(self, fact: Fact) -> Optional[str]:
+        return self.gen_facts_description([fact])[0]
+
+    def gen_multifacts_decription(
+        self, fact_groups: list[list[Fact]]
+    ) -> list[Optional[str]]: ...
+
+    def gen_multifact_description(self, fact_group: list[Fact]) -> Optional[str]:
+        return self.gen_multifacts_decription([fact_group])[0]
+
+
+class HuggingfaceDescriptionGenerator(DescriptionGenerator):
+    def __init__(self, huggingface_id: str, batch_size: int = 8):
+        self.pipe = pipeline(
+            "text-generation",
+            model=huggingface_id,
+            model_kwargs={"torch_dtype": torch.bfloat16},
+            device_map="auto",
+        )
+        assert not self.pipe.tokenizer is None
+        self.pipe.tokenizer.pad_token_id = self.pipe.tokenizer.eos_token_id
+        self.pipe.tokenizer.padding_side = "left"
+        self.batch_size = batch_size
+
+    def gen_facts_description(self, facts: list[Fact]) -> list[Optional[str]]:
+        """Given list of quadruples FACTS, generate a description using
+        PIPE.
+
+        :param facts: quadruples for which to generate a description
+        :param pipe: huggingface text-generation pipeline
+        """
+        messages = [
+            [
+                {
+                    "role": "system",
+                    "content": "You are a generation model that is expert at outputting description of events.",
+                },
+                {"role": "user", "content": get_fact_prompt(fact)},
             ]
-            outputs = pipe(
-                [batch_messages[i] for i in batch_indices],
-                max_new_tokens=256,
-                pad_token_id=pipe.tokenizer.eos_token_id,  # type: ignore
-                batch_size=len(batch_indices),
+            for fact in facts
+        ]
+
+        descriptions = []
+        for batch_start in tqdm(range(0, len(messages), self.batch_size)):
+            batch_end = batch_start + self.batch_size
+            batch_messages = messages[batch_start:batch_end]
+            batch_descriptions = ["" for _ in batch_messages]
+            batch_years = [
+                str(datetime.strptime(ts, "%Y-%m-%d").year)
+                for _, _, _, ts in facts[batch_start:batch_end]
+            ]
+            has_years = False
+            while not has_years:
+                # only perform generation for description that don't have
+                # fact year yet
+                batch_indices = [
+                    i
+                    for i in range(len(batch_messages))
+                    if not batch_years[i] in batch_descriptions[i]
+                ]
+                outputs = self.pipe(
+                    [batch_messages[i] for i in batch_indices],
+                    max_new_tokens=256,
+                    pad_token_id=pipe.tokenizer.eos_token_id,  # type: ignore
+                    batch_size=len(batch_indices),
+                )
+                for i, output in enumerate(outputs):  # type: ignore
+                    desc = output[0]["generated_text"][-1]["content"]  # type: ignore
+                    batch_descriptions[batch_indices[i]] = desc  # type: ignore
+                has_years = all(
+                    year in desc for year, desc in zip(batch_years, batch_descriptions)
+                )
+            descriptions += batch_descriptions
+
+        return descriptions
+
+    def gen_multifacts_description(
+        self, fact_groups: list[list[Fact]]
+    ) -> list[Optional[str]]:
+        messages = [
+            [
+                {
+                    "role": "system",
+                    "content": "You are a generation model that is expert at outputting description of events.",
+                },
+                {
+                    "role": "user",
+                    "content": get_multifact_prompt(fact_group),
+                },
+            ]
+            for fact_group in fact_groups
+        ]
+
+        descriptions = []
+        for batch_start in tqdm(range(0, len(messages), self.batch_size)):
+            batch_end = batch_start + self.batch_size
+            batch_messages = messages[batch_start:batch_end]
+            batch_descriptions = ["" for _ in batch_messages]
+            for facts in fact_groups[batch_start:batch_end]:
+                assert (
+                    len({datetime.strptime(fact[3], "%Y-%m-%d").year for fact in facts})
+                    == 1
+                )
+            batch_years = [
+                str(datetime.strptime(facts[0][3], "%Y-%m-%d").year)
+                for facts in fact_groups[batch_start:batch_end]
+            ]
+            has_years = False
+            while not has_years:
+                # only perform generation for description that don't have
+                # fact year yet
+                batch_indices = [
+                    i
+                    for i in range(len(batch_messages))
+                    if not batch_years[i] in batch_descriptions[i]
+                ]
+                outputs = self.pipe(
+                    [batch_messages[i] for i in batch_indices],
+                    max_new_tokens=256,
+                    pad_token_id=pipe.tokenizer.eos_token_id,  # type: ignore
+                    batch_size=len(batch_indices),
+                )
+                for i, output in enumerate(outputs):  # type: ignore
+                    desc = output[0]["generated_text"][-1]["content"]  # type: ignore
+                    batch_descriptions[batch_indices[i]] = desc  # type: ignore
+                has_years = all(
+                    year in desc for year, desc in zip(batch_years, batch_descriptions)
+                )
+            descriptions += batch_descriptions
+
+        return descriptions
+
+
+class VertexAIDescriptionGenerator(DescriptionGenerator):
+    def __init__(self, config: GCloudConfig, model_id: str):
+        self.config = config
+        self.model_id = model_id
+
+    def gen_facts_description(self, facts: list[Fact]) -> list[Optional[str]]:
+        url = f"https://{self.config.api_endpoint}/v1/projects/{self.config.project}/locations/{self.config.location}/endpoints/openapi/chat/completions"
+
+        descriptions = []
+        usage_stats = []
+
+        for fact in tqdm(facts):
+            access_token = (
+                subprocess.check_output(["gcloud", "auth", "print-access-token"])
+                .decode("utf8")
+                .strip("\n")
             )
-            for i, output in enumerate(outputs):  # type: ignore
-                desc = output[0]["generated_text"][-1]["content"]  # type: ignore
-                batch_descriptions[batch_indices[i]] = desc  # type: ignore
-            has_years = all(
-                year in desc for year, desc in zip(batch_years, batch_descriptions)
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            }
+
+            data = {
+                "model": self.model_id,
+                "stream": False,
+                "messages": [{"role": "user", "content": get_fact_prompt(fact)}],
+            }
+
+            try:
+                response = requests.post(url, headers=headers, json=data, timeout=30)
+            except Exception as e:
+                tqdm.write(
+                    f"warning: could not generate a description for {fact}. (reason: {e})"
+                )
+                descriptions.append(None)
+                continue
+            if response.status_code != 200:
+                tqdm.write(
+                    f"warning: could not generate a description for {fact}. (reason: {response.status_code} {response.json()})"
+                )
+                descriptions.append(None)
+                continue
+            response_json = response.json()
+            desc = response_json["choices"][0]["message"]["content"]
+            descriptions.append(desc)
+            usage_stats.append(response_json["usage"])
+
+        print("usage summary:")
+        print(
+            "completions_tokens: {}".format(
+                sum(s["completion_tokens"] for s in usage_stats)
             )
-        descriptions += batch_descriptions
-
-    return descriptions
-
-
-def hf_gen_multifact_description(fact_group: list[Fact], pipe: Pipeline) -> str:
-    return hf_gen_multifacts_description([fact_group], pipe)[0]
-
-
-def vertexai_gen_multifacts_description(
-    fact_groups: list[list[Fact]], model_id: str, config: GCloudConfig
-) -> list[Optional[str]]:
-    url = f"https://{config.api_endpoint}/v1/projects/{config.project}/locations/{config.location}/endpoints/openapi/chat/completions"
-
-    descriptions = []
-    usage_stats = []
-
-    for fact_group in tqdm(fact_groups):
-        access_token = (
-            subprocess.check_output(["gcloud", "auth", "print-access-token"])
-            .decode("utf8")
-            .strip("\n")
         )
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
+        print("prompt_tokens: {}".format(sum(s["prompt_tokens"] for s in usage_stats)))
 
-        data = {
-            "model": model_id,
-            "stream": False,
-            "messages": [{"role": "user", "content": get_multifact_prompt(fact_group)}],
-        }
+        return descriptions
 
-        try:
-            response = requests.post(url, headers=headers, json=data, timeout=30)
-        except Exception as e:
-            tqdm.write(
-                f"warning: could not generate a description for {fact_group}. (reason: {e})"
+    def gen_multifacts_description(
+        self, fact_groups: list[list[Fact]]
+    ) -> list[Optional[str]]:
+        url = f"https://{self.config.api_endpoint}/v1/projects/{self.config.project}/locations/{self.config.location}/endpoints/openapi/chat/completions"
+
+        descriptions = []
+        usage_stats = []
+
+        for fact_group in tqdm(fact_groups):
+            access_token = (
+                subprocess.check_output(["gcloud", "auth", "print-access-token"])
+                .decode("utf8")
+                .strip("\n")
             )
-            descriptions.append(None)
-            continue
-        if response.status_code != 200:
-            tqdm.write(
-                f"warning: could not generate a description for {fact_group}. (reason: {response.status_code} {response.json()})"
-            )
-            descriptions.append(None)
-            continue
-        response_json = response.json()
-        desc = response_json["choices"][0]["message"]["content"]
-        descriptions.append(desc)
-        usage_stats.append(response_json["usage"])
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            }
 
-    print("usage summary:")
-    print(
-        "completions_tokens: {}".format(
-            sum(s["completion_tokens"] for s in usage_stats)
+            data = {
+                "model": self.model_id,
+                "stream": False,
+                "messages": [
+                    {"role": "user", "content": get_multifact_prompt(fact_group)}
+                ],
+            }
+
+            try:
+                response = requests.post(url, headers=headers, json=data, timeout=30)
+            except Exception as e:
+                tqdm.write(
+                    f"warning: could not generate a description for {fact_group}. (reason: {e})"
+                )
+                descriptions.append(None)
+                continue
+            if response.status_code != 200:
+                tqdm.write(
+                    f"warning: could not generate a description for {fact_group}. (reason: {response.status_code} {response.json()})"
+                )
+                descriptions.append(None)
+                continue
+            response_json = response.json()
+            desc = response_json["choices"][0]["message"]["content"]
+            descriptions.append(desc)
+            usage_stats.append(response_json["usage"])
+
+        print("usage summary:")
+        print(
+            "completions_tokens: {}".format(
+                sum(s["completion_tokens"] for s in usage_stats)
+            )
         )
-    )
-    print("prompt_tokens: {}".format(sum(s["prompt_tokens"] for s in usage_stats)))
+        print("prompt_tokens: {}".format(sum(s["prompt_tokens"] for s in usage_stats)))
 
-    return descriptions
-
-
-def vertexai_gen_multifact_description(
-    fact_group: list[Fact], model_id: str, config: GCloudConfig
-) -> Optional[str]:
-    return vertexai_gen_multifacts_description([fact_group], model_id, config)[0]
+        return descriptions
 
 
 def ts_day_ordinal(day: int) -> str:
@@ -389,131 +504,6 @@ def get_news_fact_prompt(fact: Fact) -> str:
 def get_fact_prompt(fact: Fact) -> str:
     get_fact_prompt_fn = random.choice([get_news_fact_prompt, get_wiki_fact_prompt])
     return get_fact_prompt_fn(fact)
-
-
-def hf_gen_facts_description(
-    facts: list[Fact], pipe: Pipeline, batch_size: int = 8
-) -> list[str]:
-    """Given list of quadruples FACTS, generate a description using
-    PIPE.
-
-    :param facts: quadruples for which to generate a description
-    :param pipe: huggingface text-generation pipeline
-    """
-    messages = [
-        [
-            {
-                "role": "system",
-                "content": "You are a generation model that is expert at outputting description of events.",
-            },
-            {"role": "user", "content": get_fact_prompt(fact)},
-        ]
-        for fact in facts
-    ]
-
-    descriptions = []
-    for batch_start in tqdm(range(0, len(messages), batch_size)):
-        batch_end = batch_start + batch_size
-        batch_messages = messages[batch_start:batch_end]
-        batch_descriptions = ["" for _ in batch_messages]
-        batch_years = [
-            str(datetime.strptime(ts, "%Y-%m-%d").year)
-            for _, _, _, ts in facts[batch_start:batch_end]
-        ]
-        has_years = False
-        while not has_years:
-            # only perform generation for description that don't have
-            # fact year yet
-            batch_indices = [
-                i
-                for i in range(len(batch_messages))
-                if not batch_years[i] in batch_descriptions[i]
-            ]
-            outputs = pipe(
-                [batch_messages[i] for i in batch_indices],
-                max_new_tokens=256,
-                pad_token_id=pipe.tokenizer.eos_token_id,  # type: ignore
-                batch_size=len(batch_indices),
-            )
-            for i, output in enumerate(outputs):  # type: ignore
-                desc = output[0]["generated_text"][-1]["content"]  # type: ignore
-                batch_descriptions[batch_indices[i]] = desc  # type: ignore
-            has_years = all(
-                year in desc for year, desc in zip(batch_years, batch_descriptions)
-            )
-        descriptions += batch_descriptions
-
-    return descriptions
-
-
-def hf_gen_fact_description(fact: Fact, pipe: Pipeline) -> str:
-    """Given the quadruples FACT, generate a description using LM.
-
-    :param fact: quadruple for which to generate a description
-    :param pipe: huggingface text-generation pipeline
-    """
-    return hf_gen_facts_description([fact], pipe)[0]
-
-
-def vertexai_gen_facts_description(
-    facts: list[Fact], model_id: str, config: GCloudConfig
-) -> list[Optional[str]]:
-    url = f"https://{config.api_endpoint}/v1/projects/{config.project}/locations/{config.location}/endpoints/openapi/chat/completions"
-
-    descriptions = []
-    usage_stats = []
-
-    for fact in tqdm(facts):
-        access_token = (
-            subprocess.check_output(["gcloud", "auth", "print-access-token"])
-            .decode("utf8")
-            .strip("\n")
-        )
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
-
-        data = {
-            "model": model_id,
-            "stream": False,
-            "messages": [{"role": "user", "content": get_fact_prompt(fact)}],
-        }
-
-        try:
-            response = requests.post(url, headers=headers, json=data, timeout=30)
-        except Exception as e:
-            tqdm.write(
-                f"warning: could not generate a description for {fact}. (reason: {e})"
-            )
-            descriptions.append(None)
-            continue
-        if response.status_code != 200:
-            tqdm.write(
-                f"warning: could not generate a description for {fact}. (reason: {response.status_code} {response.json()})"
-            )
-            descriptions.append(None)
-            continue
-        response_json = response.json()
-        desc = response_json["choices"][0]["message"]["content"]
-        descriptions.append(desc)
-        usage_stats.append(response_json["usage"])
-
-    print("usage summary:")
-    print(
-        "completions_tokens: {}".format(
-            sum(s["completion_tokens"] for s in usage_stats)
-        )
-    )
-    print("prompt_tokens: {}".format(sum(s["prompt_tokens"] for s in usage_stats)))
-
-    return descriptions
-
-
-def vertexai_gen_fact_description(
-    fact: Fact, model_id: str, config: GCloudConfig
-) -> Optional[str]:
-    return vertexai_gen_facts_description([fact], model_id, config)[0]
 
 
 if __name__ == "__main__":
@@ -594,13 +584,13 @@ if __name__ == "__main__":
             k=args.multi_k,
         )
         if lm_provider == "hf":
-            pipe = hf_get_pipeline(lm)
-            descs = hf_gen_multifacts_description(fact_groups, pipe)
+            description_generator = HuggingfaceDescriptionGenerator(lm)
         elif lm_provider == "vertexai":
             gconfig = GCloudConfig.from_json(args.gcloud_config)
-            descs = vertexai_gen_multifacts_description(fact_groups, lm, gconfig)
+            description_generator = VertexAIDescriptionGenerator(gconfig, lm)
         else:
             raise ValueError(f"Unknown LLM provider: {lm_provider}.")
+        descs = description_generator.gen_multifacts_decription(fact_groups)
         for fact_group, desc in zip(fact_groups, descs):
             if desc is None:
                 desc = ["None", "None", "None", "None"]
@@ -620,13 +610,13 @@ if __name__ == "__main__":
             )
     else:
         if lm_provider == "hf":
-            pipe = hf_get_pipeline(lm)
-            descs = hf_gen_facts_description(facts, pipe)
+            description_generator = HuggingfaceDescriptionGenerator(lm)
         elif lm_provider == "vertexai":
             gconfig = GCloudConfig.from_json(args.gcloud_config)
-            descs = vertexai_gen_facts_description(facts, lm, gconfig)
+            description_generator = VertexAIDescriptionGenerator(gconfig, lm)
         else:
             raise ValueError(f"Unknown LLM provider: {lm_provider}.")
+        descs = description_generator.gen_facts_description(facts)
         for fact, desc in zip(facts, descs):
             if desc is None:
                 desc = ["None", "None", "None", "None"]
