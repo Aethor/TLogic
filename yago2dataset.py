@@ -211,6 +211,28 @@ def sparsity_filter(facts: list[Fact], threshold: int, depth: int = 0) -> list[F
     return filtered_facts
 
 
+def topkrel_filter(facts: list[Fact], k: int) -> list[Fact]:
+    """Limit the frequency of relations to (approximately) the
+    frequency of the top k most frequent relation.
+    """
+    relcount = Counter([rel for _, rel, _, _ in facts])
+    topk_rel = sorted(relcount, key=lambda k: -relcount[k])[k - 1]
+    relfreq = {k: v / len(facts) for k, v in relcount.items()}
+
+    new_facts = []
+    for i, fact in enumerate(facts):
+        rel = fact[1]
+        if (
+            relcount[rel] < relcount[topk_rel]
+            # deterministically limit the frequency of rel to
+            # relfreq[topk_rel]
+            or i % int(relfreq[rel] / relfreq[topk_rel]) == 0
+        ):
+            new_facts.append(fact)
+
+    return new_facts
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-dir", "-i", type=pl.Path)
@@ -226,7 +248,8 @@ if __name__ == "__main__":
         default=2024,
         help="The max year is used as the test set. max-year - 1 is used as the validation set, while all prior years are used for training.",
     )
-    parser.add_argument("--sparsity-filter-threshold", "-s", type=int, default=5)
+    parser.add_argument("--sparsity-filter-threshold", "-s", type=int, default=0)
+    parser.add_argument("--topkrel-filter-k", "-k", type=int, default=1)
     parser.add_argument("--linearize", "-l", action="store_true")
     args = parser.parse_args()
 
@@ -238,6 +261,7 @@ if __name__ == "__main__":
         )
         relations = set(f[1] for f in facts)
     facts = sparsity_filter(facts, args.sparsity_filter_threshold)
+    facts = topkrel_filter(facts, args.topkrel_filter_k)
     print(f"found {len(facts)} facts for {len(relations)} relations.")
     entities = {f[0] for f in facts} | {f[2] for f in facts}
     print(f"found {len(entities)} unique entities.")
