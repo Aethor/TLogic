@@ -226,7 +226,7 @@ def topkrel_filter(facts: list[Fact], k: int) -> list[Fact]:
             relcount[rel] < relcount[topk_rel]
             # deterministically limit the frequency of rel to
             # relfreq[topk_rel]
-            or i % int(relfreq[rel] / relfreq[topk_rel]) == 0
+            or i % round(relfreq[rel] / relfreq[topk_rel]) == 0
         ):
             new_facts.append(fact)
 
