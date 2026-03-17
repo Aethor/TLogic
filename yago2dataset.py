@@ -1,5 +1,5 @@
 from typing import Literal
-import argparse, os, re
+import argparse, os, re, random
 from collections import Counter
 import pathlib as pl
 from fiction.utils import dump_facts, dump_json, dump_stats
@@ -219,14 +219,12 @@ def topkrel_filter(facts: list[Fact], k: int) -> list[Fact]:
     topk_rel = sorted(relcount, key=lambda k: -relcount[k])[k - 1]
     relfreq = {k: v / len(facts) for k, v in relcount.items()}
 
+    r = random.Random(0)
     new_facts = []
     for i, fact in enumerate(facts):
         rel = fact[1]
-        if (
-            relcount[rel] < relcount[topk_rel]
-            # deterministically limit the frequency of rel to
-            # relfreq[topk_rel]
-            or i % round(relfreq[rel] / relfreq[topk_rel]) == 0
+        if relfreq[rel] < relfreq[topk_rel] or r.random() < (
+            relfreq[topk_rel] / relfreq[rel]
         ):
             new_facts.append(fact)
 
