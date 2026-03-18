@@ -240,7 +240,7 @@ def prepare_queries(
         subj = subjects[subj_i]
 
         unl_rel = unlinearize_rel(rel)
-        if is_rel_allowed(subj, rel, db_info):
+        if is_rel_allowed(subj, unl_rel, db_info):
             if unl_rel in non_exclusive_relations:
                 subject_candidates.append(subj)
             elif is_start_rel(rel):
