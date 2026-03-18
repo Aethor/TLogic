@@ -443,7 +443,14 @@ if __name__ == "__main__":
         "--max-queries",
         type=int,
         help="Maximum number of queries for a sampled relation. A higher number increases the chance to correctly mimic the relation distribution of the --mimic-year, but also increases computation time.",
-        default=4,
+        default=32,
+    )
+    parser.add_argument(
+        "-x",
+        "--max-tries-nb",
+        type=int,
+        help="Maximum number of tries to generate the wanted number of facts in a day",
+        default=32,
     )
     parser.add_argument(
         "-n",
@@ -516,7 +523,7 @@ if __name__ == "__main__":
                 rules,
                 fact_dataset,
                 db_info,
-                8,
+                args.max_tries_nb,
                 args.max_queries,
                 set(args.non_exclusive_relations),
                 parallel,
