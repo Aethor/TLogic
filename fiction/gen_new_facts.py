@@ -166,7 +166,7 @@ def is_end_rel(rel: str) -> bool:
 
 
 def rel_is_active(rel: str, entity_facts: list[Fact]) -> bool:
-    """Check if relation REL is active (opened)."""
+    """Check if relation REL is active (opened) for an entity."""
     if is_start_rel(rel):
         startRel = rel
         endRel = re.sub(r"([^:]+):(start)(.+)", r"\1:end\3", rel)
@@ -185,6 +185,11 @@ def rel_is_active(rel: str, entity_facts: list[Fact]) -> bool:
         return False
 
     return date.fromisoformat(latest_start) > date.fromisoformat(latest_end)
+
+
+def rel_is_active_with_obj(rel: str, obj: str, entity_facts: list[Fact]) -> bool:
+    """Check if relation REL is active with OBJ for an entity."""
+    return rel_is_active(rel, [(s, r, o, t) for s, r, o, t in entity_facts if o == obj])
 
 
 def unlinearize_rel(rel: str) -> str:
@@ -221,14 +226,19 @@ def prepare_queries(
     subj_facts: dict[str, list[Fact]],
     db_info: YagoDBInfo,
     max_queries: int,
-    non_exclusive_relations: set[str],
+    strictly_exclusive_relations: set[str],
 ) -> list[Query]:
-    """Given a relationship REL, randomly sample up to MAX_QUERIES
-    queries of the form (subject, relation, ?, timestamp).  Pre-filter
-    queries so that subject and relation are compatible according to
-    YAGO schema, and that relation is coherent regarding its state on
-    subject (e.g. you can't start a new job if you already have one).
-    NON_EXCLUSIVE_RELATIONS are excluded from the coherency logic.
+    """Given a relationship REL, randomly sample up to MAX_QUERIES.
+    Pre-filter queries so that subject and relation are compatible
+    according to YAGO schema, and that relation is coherent regarding
+    its state on subject (e.g. you can't start a new job if you
+    already have one).
+
+    :param strictly_exclusive_relations: only these relations are
+        checked for the coherency logic.
+
+    :return: a list of queries of the form (subject, relation, ?,
+             timestamp)
     """
     subjects = list(subj_facts.keys())
 
@@ -241,9 +251,11 @@ def prepare_queries(
 
         unl_rel = unlinearize_rel(rel)
         if is_rel_allowed(subj, unl_rel, db_info):
-            if unl_rel in non_exclusive_relations:
+            if not unl_rel in strictly_exclusive_relations:
                 subject_candidates.append(subj)
-            elif is_start_rel(rel):
+                continue
+
+            if is_start_rel(rel):
                 if not rel_is_active(rel, subj_facts[subj]):
                     subject_candidates.append(subj)
             elif is_end_rel(rel):
@@ -257,8 +269,22 @@ def prepare_queries(
     return [(subj, rel, "?", ts) for subj in subject_candidates]
 
 
+def exclusive_relation_is_open(rel: str, obj: str, subj_facts: list[Fact]) -> bool:
+    subj_facts_with_obj = [(s, r, o, t) for s, r, o, t in subj_facts if o == obj]
+    if is_start_rel(rel):
+        return rel_is_active(rel, subj_facts_with_obj)
+    elif is_end_rel(rel):
+        return not rel_is_active(rel, subj_facts_with_obj)
+    else:
+        return False
+
+
 def filter_query_answers(
-    answers: list[QueryOutput], queries: list[Query], db_info: YagoDBInfo
+    answers: list[QueryOutput],
+    queries: list[Query],
+    db_info: YagoDBInfo,
+    exclusive_relations: set[str],
+    subj_facts: dict[str, list[Fact]],
 ) -> Optional[Fact]:
     """
     Filter ANSWERS to return the best possible valid (according to
@@ -269,7 +295,19 @@ def filter_query_answers(
         [((query[0], query[1], obj, query[3]), score) for obj, score in candidates]
         for candidates, query in zip(answers, queries)
     ]
-    # filter and keep only valid facts
+    # filter and keep only valid facts according to relation
+    # exclusivity
+    obj_candidates = [
+        [
+            ((s, r, o, t), score)
+            for (s, r, o, t), score in candidates
+            if not r in exclusive_relations
+            or exclusive_relation_is_open(r, o, subj_facts[s])
+        ]
+        for candidates in obj_candidates
+    ]
+    # filter and keep only valid facts according to the database
+    # schema
     obj_candidates = [
         [(fact, score) for fact, score in candidates if is_fact_valid(fact, db_info)]
         for candidates in obj_candidates
@@ -289,7 +327,8 @@ def sample_new_facts(
     db_info: YagoDBInfo,
     max_tries_nb: int,
     max_queries: int,
-    non_exclusive_relations: set[str],
+    exclusive_relations: set[str],
+    strictly_exclusive_relations: str[str],
     parallel: Parallel,
 ) -> list[Fact]:
     """Given a timestamp TS at the day level, attempt to generate
@@ -310,9 +349,10 @@ def sample_new_facts(
         generating FACTS_PER_DAY facts.
     :param max_queries: Maximum number of queries for a sampled
         relation.  passed to :func:`prepare_queries`
-    :param non_exclusive_relations: relations not affected by the
-        close/open relation filtering logic.  passed to
-        :func:`prepare_queries`.
+    :param exclusive_relations: a list of relations treated as
+        exclusive (s can only have a single open relation r with o)
+    :param strictly_exclusive_relations: a list of relations treated as
+        strictly exclusive (s can only have a single open relation r)
 
     :return: generated facts.
     """
@@ -340,7 +380,7 @@ def sample_new_facts(
         queries = []
         for rel in relations:
             rel_queries = prepare_queries(
-                rel, subj_facts, db_info, max_queries, non_exclusive_relations
+                rel, subj_facts, db_info, max_queries, strictly_exclusive_relations
             )
             queries.append(rel_queries)
             for rel_query in rel_queries:
@@ -352,6 +392,7 @@ def sample_new_facts(
         # 2. TLogic query
         # OPTIM: we precompute train_idx for make_grapher, see query_tlogic.
         _train_idx = fact_dataset.map_to_idx()
+        subj_facts = fact_dataset.subj_facts()  # { subject => [fact, ...]}
         query_answers = parallel(
             delayed(query_tlogic)(queries[i], rules, fact_dataset, _train_idx)
             for i in range(to_gen_nb)
@@ -359,7 +400,9 @@ def sample_new_facts(
         for answers, rel_queries in zip(query_answers, queries):
             # 3. filtering: we keep only valid candidates according to
             # db_info
-            new_fact = filter_query_answers(answers, rel_queries, db_info)
+            new_fact = filter_query_answers(
+                answers, rel_queries, db_info, exclusive_relations, subj_facts
+            )
             if new_fact is None:
                 continue
 
@@ -471,11 +514,18 @@ if __name__ == "__main__":
         default=32,
     )
     parser.add_argument(
-        "-n",
-        "--non-exclusive-relations",
+        "-xr",
+        "--exclusive-relations",
         default=set(),
         nargs="*",
-        help="A list of relations that are considered non exclusive. By default, the generation algorithm considers a relation such as startWorksFor/endWorksFor as exclusive, meaning it wont generate a new startWorksFor event for entity A if the relation is not closed (i.e. A already works for B). This is desirable in many cases, but does not make sense for some relations (such as startAward/endAward).",
+        help="A list of relations that are considered exclusive, meaning s can only have a single open relation r with o.",
+    )
+    parser.add_argument(
+        "-sxr",
+        "--strictly-exclusive-relations",
+        default=set(),
+        nargs="*",
+        help="A list of relations that are strictly exclusive, meaning s can only have single open relation r.",
     )
     args = parser.parse_args()
 
@@ -543,7 +593,8 @@ if __name__ == "__main__":
                 db_info,
                 args.max_tries_nb,
                 args.max_queries,
-                set(args.non_exclusive_relations),
+                set(args.exclusive_relations),
+                set(args.strictly_exclusive_relations),
                 parallel,
             )
 
