@@ -269,14 +269,14 @@ def prepare_queries(
     return [(subj, rel, "?", ts) for subj in subject_candidates]
 
 
-def exclusive_relation_is_open(rel: str, obj: str, subj_facts: list[Fact]) -> bool:
+def relation_is_coherent(rel: str, obj: str, subj_facts: list[Fact]) -> bool:
     subj_facts_with_obj = [(s, r, o, t) for s, r, o, t in subj_facts if o == obj]
     if is_start_rel(rel):
-        return rel_is_active(rel, subj_facts_with_obj)
-    elif is_end_rel(rel):
         return not rel_is_active(rel, subj_facts_with_obj)
+    elif is_end_rel(rel):
+        return rel_is_active(rel, subj_facts_with_obj)
     else:
-        return False
+        return True
 
 
 def filter_query_answers(
@@ -296,13 +296,12 @@ def filter_query_answers(
         for candidates, query in zip(answers, queries)
     ]
     # filter and keep only valid facts according to relation
-    # exclusivity
+    # coherency
     obj_candidates = [
         [
             ((s, r, o, t), score)
             for (s, r, o, t), score in candidates
-            if not r in exclusive_relations
-            or exclusive_relation_is_open(r, o, subj_facts[s])
+            if relation_is_coherent(r, o, subj_facts[s])
         ]
         for candidates in obj_candidates
     ]
@@ -328,7 +327,6 @@ def sample_new_facts(
     max_tries_nb: int,
     max_queries: int,
     exclusive_relations: set[str],
-    strictly_exclusive_relations: str[str],
     parallel: Parallel,
 ) -> list[Fact]:
     """Given a timestamp TS at the day level, attempt to generate
@@ -350,9 +348,7 @@ def sample_new_facts(
     :param max_queries: Maximum number of queries for a sampled
         relation.  passed to :func:`prepare_queries`
     :param exclusive_relations: a list of relations treated as
-        exclusive (s can only have a single open relation r with o)
-    :param strictly_exclusive_relations: a list of relations treated as
-        strictly exclusive (s can only have a single open relation r)
+        exclusive (s can only have a single active relation r)
 
     :return: generated facts.
     """
@@ -380,7 +376,7 @@ def sample_new_facts(
         queries = []
         for rel in relations:
             rel_queries = prepare_queries(
-                rel, subj_facts, db_info, max_queries, strictly_exclusive_relations
+                rel, subj_facts, db_info, max_queries, exclusive_relations
             )
             queries.append(rel_queries)
             for rel_query in rel_queries:
@@ -400,9 +396,7 @@ def sample_new_facts(
         for answers, rel_queries in zip(query_answers, queries):
             # 3. filtering: we keep only valid candidates according to
             # db_info
-            new_fact = filter_query_answers(
-                answers, rel_queries, db_info, exclusive_relations, subj_facts
-            )
+            new_fact = filter_query_answers(answers, rel_queries, db_info, subj_facts)
             if new_fact is None:
                 continue
 
@@ -518,14 +512,7 @@ if __name__ == "__main__":
         "--exclusive-relations",
         default=set(),
         nargs="*",
-        help="A list of relations that are considered exclusive, meaning s can only have a single open relation r with o.",
-    )
-    parser.add_argument(
-        "-sxr",
-        "--strictly-exclusive-relations",
-        default=set(),
-        nargs="*",
-        help="A list of relations that are strictly exclusive, meaning s can only have single open relation r.",
+        help="A list of relations that are strictly exclusive, meaning s can only have single active relation r.",
     )
     args = parser.parse_args()
 
@@ -594,7 +581,6 @@ if __name__ == "__main__":
                 args.max_tries_nb,
                 args.max_queries,
                 set(args.exclusive_relations),
-                set(args.strictly_exclusive_relations),
                 parallel,
             )
 
