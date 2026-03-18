@@ -284,12 +284,12 @@ class DescriptionGenerator(Protocol):
     def gen_fact_description(self, fact: Fact) -> Optional[str]:
         return self.gen_facts_description([fact])[0]
 
-    def gen_multifacts_decription(
+    def gen_multifacts_description(
         self, fact_groups: list[list[Fact]]
     ) -> list[Optional[str]]: ...
 
     def gen_multifact_description(self, fact_group: list[Fact]) -> Optional[str]:
-        return self.gen_multifacts_decription([fact_group])[0]
+        return self.gen_multifacts_description([fact_group])[0]
 
 
 class HuggingfaceDescriptionGenerator(DescriptionGenerator):
@@ -727,7 +727,7 @@ if __name__ == "__main__":
             )
         else:
             raise ValueError(f"Unknown LLM provider: {lm_provider}.")
-        descs = description_generator.gen_multifacts_decription(fact_groups)
+        descs = description_generator.gen_multifacts_description(fact_groups)
         for fact_group, desc in zip(fact_groups, descs):
             if desc is None:
                 desc = ["None", "None", "None", "None"]
