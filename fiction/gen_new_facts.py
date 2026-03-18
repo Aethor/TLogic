@@ -283,7 +283,6 @@ def filter_query_answers(
     answers: list[QueryOutput],
     queries: list[Query],
     db_info: YagoDBInfo,
-    exclusive_relations: set[str],
     subj_facts: dict[str, list[Fact]],
 ) -> Optional[Fact]:
     """
@@ -384,7 +383,8 @@ def sample_new_facts(
                 # make sure we don't generate two facts for the same
                 # subject on the same day - this avoids generating
                 # contradictory facts
-                del subj_facts[subj]
+                if subj in subj_facts:
+                    del subj_facts[subj]
         # 2. TLogic query
         # OPTIM: we precompute train_idx for make_grapher, see query_tlogic.
         _train_idx = fact_dataset.map_to_idx()
