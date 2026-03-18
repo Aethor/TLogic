@@ -239,8 +239,9 @@ def prepare_queries(
         subj_i = random.randrange(0, len(subjects))
         subj = subjects[subj_i]
 
-        if is_rel_allowed(subj, unlinearize_rel(rel), db_info):
-            if rel in non_exclusive_relations:
+        unl_rel = unlinearize_rel(rel)
+        if is_rel_allowed(subj, rel, db_info):
+            if unl_rel in non_exclusive_relations:
                 subject_candidates.append(subj)
             elif is_start_rel(rel):
                 if not rel_is_active(rel, subj_facts[subj]):
