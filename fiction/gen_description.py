@@ -142,10 +142,10 @@ def make_get_styled_multifact_prompt(
     def get_multifact_prompt(fact_group: list[Fact]) -> str:
         formatted_facts = [format_fact(fact) for fact in fact_group]
         formatted_facts = [randomize_fact_ts_style(fact) for fact in formatted_facts]
-        formatted_facts = "\n".join(str(fact) for fact in formatted_facts)
-
         relations = {rel for _, rel, _, _ in formatted_facts}
+
         relations = "\n".join(f"{rel}: {YAGO_REL_DESC.get(rel)}" for rel in relations)
+        formatted_facts = "\n".join(str(fact) for fact in formatted_facts)
 
         prompt = f"""Given the following events represented as quadruplets of the form (subject, relation, object, timestamp):
         {formatted_facts}
