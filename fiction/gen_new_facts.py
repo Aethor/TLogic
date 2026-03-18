@@ -170,7 +170,7 @@ def rel_is_active(rel: str, entity_facts: list[Fact]) -> bool:
     if is_start_rel(rel):
         startRel = rel
         endRel = re.sub(r"([^:]+):(start)(.+)", r"\1:end\3", rel)
-    elif is_end_rel("end"):
+    elif is_end_rel(rel):
         endRel = rel
         startRel = re.sub(r"([^:]+):(end)(.+)", r"\1:start\3", rel)
     else:
