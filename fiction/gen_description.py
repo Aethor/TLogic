@@ -227,7 +227,7 @@ def make_get_styled_fact_prompt(
         {formatted_fact},
         The following definition for the {formatted_relation} relation:
         {YAGO_REL_DESC.get(formatted_relation)},
-        Generate a one to three sentences description text for this event, in the style of {style}. The entirety of the information in the given quadruplet must be preserved. You can add additional information, but do NOT add any additional temporal event.
+        Generate a one to two sentences description text for this event, in the style of {style}. The entirety of the information in the given quadruplet must be preserved. You can add additional information, but do NOT add any additional temporal event.
         """
         if not additional_instructions is None:
             prompt += additional_instructions
