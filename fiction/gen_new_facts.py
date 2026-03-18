@@ -405,7 +405,21 @@ if __name__ == "__main__":
         "-m",
         "--mimic-year",
         type=int,
-        help="year of the past dataset to use as an inspiration when generating the dataset. Number of facts per day will be the same as that year (up to 128 days). Relations will be sampled according to the distribution of relations that year.",
+        help="year of the past dataset to use as an inspiration when generating the dataset. Number of facts per day will be the same as that year if --facts-per-day is not set (up to --max-facts-per-day days). Relations will be sampled according to the distribution of relations that year. If not specified, only use --max-facts-per-day to determine the number of facts to generate.",
+    )
+    parser.add_argument(
+        "-a",
+        "--max-facts-per-day",
+        type=int,
+        default=128,
+        help="maximum number of facts to generate per day. Is ignored if --facts-per-day is set.",
+    )
+    parser.add_argument(
+        "-c",
+        "--facts-per-day",
+        type=int,
+        default=None,
+        help="If specified, number of facts per day to generate (otherwise, use --mimic-year to determine that).",
     )
     parser.add_argument(
         "-e", "--year", type=int, help="Year for which to generate new facts."
@@ -463,7 +477,8 @@ if __name__ == "__main__":
         d = date(args.year, 1, 1)
 
     # facts for the year we are trying to mimic. We copy:
-    # - the number of facts per day of that year
+    # - the number of facts per day of that year (if --facts-per-day
+    #   is not set)
     # - the relationship distribution for that year
     mimic_year_facts = [
         fact
@@ -485,11 +500,14 @@ if __name__ == "__main__":
         while d.year < args.year + 1:
             ts = d.strftime("%Y-%m-%d")
 
-            facts_per_day = sum(
-                mimic_year_d.day == d.day and mimic_year_d.month == d.month
-                for mimic_year_d in mimic_year_dates
-            )
-            facts_per_day = min(128, facts_per_day)
+            if not args.facts_per_day is None:
+                facts_per_day = args.facts_per_day
+            else:
+                facts_per_day = sum(
+                    mimic_year_d.day == d.day and mimic_year_d.month == d.month
+                    for mimic_year_d in mimic_year_dates
+                )
+                facts_per_day = min(args.max_facts_per_day, facts_per_day)
 
             local_new_facts = sample_new_facts(
                 ts,
