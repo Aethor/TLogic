@@ -157,15 +157,33 @@ def maybe_max(lst: list[T], **kwargs) -> Optional[T]:
     return max(lst, **kwargs)
 
 
+def is_start_rel(rel: str) -> bool:
+    return rel[rel.index(":") + 1 :].startswith("start")
+
+
+def is_end_rel(rel: str) -> bool:
+    return rel[rel.index(":") + 1 :].startswith("end")
+
+
 def rel_is_active(rel: str, entity_facts: list[Fact]) -> bool:
     """Check if relation REL is active (opened)."""
+    if is_start_rel(rel):
+        startRel = rel
+        endRel = re.sub(r"([^:]+):(start)(.+)", r"\1:end\3", rel)
+    elif rel.startswith("end"):
+        endRel = rel
+        startRel = re.sub(r"([^:]+):(end)(.+)", r"\1:start\3", rel)
+    else:
+        raise ValueError(rel)
+
     latest_start = maybe_max([f[3] for f in entity_facts if f[1] == rel])
     if latest_start is None:
         return False
-    endRel = "end" + rel[5:]
+
     latest_end = maybe_max([f[3] for f in entity_facts if f[1] == endRel])
     if latest_end is None:
         return False
+
     return date.fromisoformat(latest_start) > date.fromisoformat(latest_end)
 
 
@@ -205,8 +223,7 @@ def prepare_queries(
     max_queries: int,
     non_exclusive_relations: set[str],
 ) -> list[Query]:
-    """
-    Given a relationship REL, randomly sample up to MAX_QUERIES
+    """Given a relationship REL, randomly sample up to MAX_QUERIES
     queries of the form (subject, relation, ?, timestamp).  Pre-filter
     queries so that subject and relation are compatible according to
     YAGO schema, and that relation is coherent regarding its state on
@@ -225,10 +242,10 @@ def prepare_queries(
         if is_rel_allowed(subj, unlinearize_rel(rel), db_info):
             if rel in non_exclusive_relations:
                 subject_candidates.append(subj)
-            elif rel.startswith("start"):
+            elif is_start_rel(rel):
                 if not rel_is_active(rel, subj_facts[subj]):
                     subject_candidates.append(subj)
-            elif rel.startswith("end"):
+            elif is_end_rel(rel):
                 if rel_is_active(rel, subj_facts[subj]):
                     subject_candidates.append(subj)
             else:
