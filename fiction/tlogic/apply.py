@@ -49,7 +49,6 @@ def apply_rules(
     cur_ts = test_data[test_queries_idx[0]][3]
     edges = ra.get_window_edges(data.all_idx, cur_ts, learn_edges, window)
 
-    it_start = time.time()
     for j in test_queries_idx:
         test_query = test_data[j]
         cands_dict = [dict() for _ in range(len(args))]
@@ -125,21 +124,10 @@ def apply_rules(
             for s in range(len(args)):
                 all_candidates[s][j] = dict()
 
-        if not (j - test_queries_idx[0] + 1) % 100:
-            it_end = time.time()
-            it_time = round(it_end - it_start, 6)
-            print(
-                "Process {0}: test samples finished: {1}/{2}, {3} sec".format(
-                    i, j - test_queries_idx[0] + 1, len(test_queries_idx), it_time
-                )
-            )
-            it_start = time.time()
-
     return all_candidates, no_cands_counter
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", "-d", default="", type=str)
     parser.add_argument("--test_data", default="test", type=str)
