@@ -1,4 +1,5 @@
 import re
+from datetime import date, timedelta
 from hypothesis import given, strategies as st
 from fiction.gen_new_facts import Fact, relation_is_coherent
 
@@ -41,8 +42,40 @@ def test_no_relation_is_coherent(start_rel: str, obj: str):
 
 
 @given(st_start_rel, st_obj, st.lists(st_fact(subj=st.just("A")), min_size=1))
-def test_open_relation_is_coherent(start_rel: str, obj: str, facts: list[Fact]):
-    last_ts = max(ts for _, _, _, ts in facts)
+def test_active_relation_end_is_coherent(start_rel: str, obj: str, facts: list[Fact]):
+    last_ts = date.fromisoformat(max(ts for _, _, _, ts in facts))
+    last_ts = last_ts + timedelta(days=1)
     assert relation_is_coherent(
-        to_end_rel(start_rel), obj, facts + [("A", start_rel, obj, last_ts)]
+        to_end_rel(start_rel), obj, facts + [("A", start_rel, obj, last_ts.isoformat())]
+    )
+
+
+@given(st_start_rel, st_obj, st.lists(st_fact(subj=st.just("A")), min_size=1))
+def test_active_relation_start_is_not_coherent(
+    start_rel: str, obj: str, facts: list[Fact]
+):
+    last_ts = date.fromisoformat(max(ts for _, _, _, ts in facts))
+    last_ts = last_ts + timedelta(days=1)
+    assert not relation_is_coherent(
+        start_rel, obj, facts + [("A", start_rel, obj, last_ts.isoformat())]
+    )
+
+
+@given(st_end_rel, st_obj, st.lists(st_fact(subj=st.just("A")), min_size=1))
+def test_inactive_relation_end_is_not_coherent(
+    end_rel: str, obj: str, facts: list[Fact]
+):
+    last_ts = date.fromisoformat(max(ts for _, _, _, ts in facts))
+    last_ts = last_ts + timedelta(days=1)
+    assert not relation_is_coherent(
+        end_rel, obj, facts + [("A", end_rel, obj, last_ts.isoformat())]
+    )
+
+
+@given(st_end_rel, st_obj, st.lists(st_fact(subj=st.just("A")), min_size=1))
+def test_inactive_relation_start_is_coherent(end_rel: str, obj: str, facts: list[Fact]):
+    last_ts = date.fromisoformat(max(ts for _, _, _, ts in facts))
+    last_ts = last_ts + timedelta(days=1)
+    assert relation_is_coherent(
+        to_start_rel(end_rel), obj, facts + [("A", end_rel, obj, last_ts.isoformat())]
     )
