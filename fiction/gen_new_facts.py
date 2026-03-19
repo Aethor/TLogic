@@ -176,13 +176,13 @@ def rel_is_active(rel: str, entity_facts: list[Fact]) -> bool:
     else:
         raise ValueError(rel)
 
-    latest_start = maybe_max([f[3] for f in entity_facts if f[1] == rel])
+    latest_start = maybe_max([f[3] for f in entity_facts if f[1] == startRel])
     if latest_start is None:
-        return False
+        return False  # the relation never started, it's not active
 
     latest_end = maybe_max([f[3] for f in entity_facts if f[1] == endRel])
     if latest_end is None:
-        return False
+        return True  # the relation started once and did not end, it's active
 
     return date.fromisoformat(latest_start) > date.fromisoformat(latest_end)
 

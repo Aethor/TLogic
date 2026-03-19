@@ -20,6 +20,12 @@ dependencies = [
     "openai>=2.24.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest",
+    "hypothesis"
+]
+
 [project.optional-dependencies]
 cpu = [
   "torch>=2.7.0",
