@@ -151,7 +151,7 @@ def make_get_styled_multifact_prompt(
         {formatted_facts}
         and the following definitions for the relations:
         {relations}
-        Generate a short paragraph describing these events, in the style of {style}. The entirety of the information in the given quadruplets must be preserved. Do NOT add any additional information or text: you must only generate the description.
+        Generate a short paragraph describing these events, in the style of {style}. The entirety of the information in the given quadruplets must be preserved. You can add additional information, but do NOT add any additional temporal event.
         """
         if not additional_instructions is None:
             prompt += additional_instructions
