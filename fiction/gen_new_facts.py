@@ -223,6 +223,7 @@ def is_fact_valid(fact: Fact, db_info: YagoDBInfo) -> bool:
 
 def prepare_queries(
     rel: str,
+    ts: str,
     subj_facts: dict[str, list[Fact]],
     db_info: YagoDBInfo,
     max_queries: int,
@@ -375,20 +376,12 @@ def sample_new_facts(
         queries = []
         for rel in relations:
             rel_queries = prepare_queries(
-                rel, subj_facts, db_info, max_queries, exclusive_relations
+                rel, ts, subj_facts, db_info, max_queries, exclusive_relations
             )
             queries.append(rel_queries)
-            for rel_query in rel_queries:
-                subj = rel_query[0]
-                # make sure we don't generate two facts for the same
-                # subject on the same day - this avoids generating
-                # contradictory facts
-                if subj in subj_facts:
-                    del subj_facts[subj]
         # 2. TLogic query
         # OPTIM: we precompute train_idx for make_grapher, see query_tlogic.
         _train_idx = fact_dataset.map_to_idx()
-        subj_facts = fact_dataset.subj_facts()  # { subject => [fact, ...]}
         query_answers = parallel(
             delayed(query_tlogic)(queries[i], rules, fact_dataset, _train_idx)
             for i in range(to_gen_nb)
