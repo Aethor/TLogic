@@ -116,6 +116,11 @@ def group_related_facts(
     dists = np.zeros((len(facts), len(facts)))
     for i in tqdm(range(len(facts)), desc="dist"):
         for j in range(i):
+            if facts[i] == facts[j]:
+                # in this special case, we don't want the same fact
+                # two times in a cluster
+                dists[i][j] = float("inf")
+                continue
             dist = facts_dist(facts[i], facts[j], alpha, k, db_info)
             dists[i][j] = dist
             dists[j][i] = dist
