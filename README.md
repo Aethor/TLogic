@@ -7,6 +7,9 @@ descriptions.
    `fiction/gen_new_facts.py` script.
 2. Descriptions can then be added to these facts with the
    `fiction/gen_description.py` script.
+
+
+The generated datasets can be found in [this HuggingFace collection](https://huggingface.co/collections/aeth0r/yago-temporal-knowledge-graph-extraction-datasets).
    
    
 # Usage
