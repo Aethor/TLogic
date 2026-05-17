@@ -9,7 +9,7 @@ descriptions.
    `fiction/gen_description.py` script.
 
 
-The generated datasets can be found in [this HuggingFace collection](https://huggingface.co/collections/aeth0r/yago-temporal-knowledge-graph-extraction).
+The generated datasets can be found in [this HuggingFace collection](https://huggingface.co/collections/aeth0r/yago-temporal-knowledge-graph-extraction-datasets).
    
    
 # Usage
